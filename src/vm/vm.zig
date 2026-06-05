@@ -806,6 +806,7 @@ const VM = struct {
             49 => .{ .teks = crypto.sha256Raw(a, args[0].teks) catch return self.rt("gagal sha256Raw") },
             50 => .{ .teks = crypto.hmacSha256Raw(a, args[0].teks, args[1].teks) catch return self.rt("gagal hmac raw") },
             51 => .{ .teks = crypto.pbkdf2Sha256(a, args[0].teks, args[1].teks, args[2].bulat) catch return self.rt("gagal pbkdf2") },
+            52 => .{ .teks = binmod.bacaFloat(a, args[0].teks, args[1].bulat, args[2].bulat) catch return self.rt("gagal bacaFloat") },
             else => unreachable,
         };
     }
