@@ -488,7 +488,7 @@ pub const Interpreter = struct {
                 break :blk .kosong;
             },
             30 => blk: {
-                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch return self.runtimeError(pos, "gagal menyambung");
+                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch break :blk .{ .bulat = -1 };
                 self.conns.append(stream) catch return self.runtimeError(pos, "kehabisan memori");
                 break :blk .{ .bulat = @intCast(self.conns.items.len - 1) };
             },

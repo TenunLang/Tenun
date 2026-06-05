@@ -379,7 +379,7 @@ const Compiler = struct {
                         if (self.fn_index.get(name)) |idx| {
                             for (call.args) |a| try self.expr(a);
                             try c.emitOp(.call);
-                            try c.emit(@intCast(idx));
+                            try c.emitU16(@intCast(idx));
                             try c.emit(@intCast(call.args.len));
                             return;
                         }
@@ -681,9 +681,9 @@ const VM = struct {
                     code = frame.func.chunk.code.items;
                 },
                 .call => {
-                    const fidx = code[frame.ip];
-                    const argc = code[frame.ip + 1];
-                    frame.ip += 2;
+                    const fidx = readU16(code, &frame.ip);
+                    const argc = code[frame.ip];
+                    frame.ip += 1;
                     const base = self.top - argc;
                     try self.frames.append(.{ .func = &self.functions[fidx], .ip = 0, .base = base });
                     frame = &self.frames.items[self.frames.items.len - 1];
@@ -833,7 +833,7 @@ const VM = struct {
                 break :blk Value.kosong;
             },
             30 => blk: {
-                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch return self.rt("gagal menyambung");
+                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch break :blk Value{ .bulat = -1 };
                 self.conns.append(stream) catch return self.rt("kehabisan memori");
                 break :blk Value{ .bulat = @intCast(self.conns.items.len - 1) };
             },
