@@ -1,0 +1,9 @@
+biar angka: []bulat = [5, 10, 15, 20];
+
+biar total: bulat = 0;
+untuk i dari 0 sampai panjang(angka) {
+    total = total + angka[i];
+}
+
+cetak(angka);
+cetak(total);

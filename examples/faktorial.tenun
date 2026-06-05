@@ -1,0 +1,8 @@
+fungsi faktorial(n: bulat): bulat {
+    kalau n <= 1 {
+        kembali 1;
+    }
+    kembali n * faktorial(n - 1);
+}
+
+cetak(faktorial(5));

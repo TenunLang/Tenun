@@ -1,0 +1,16 @@
+fungsi salam(nama: teks): kosong {
+    cetak("Halo, " + nama);
+}
+
+biar angka: bulat = 10;
+tetap pi = 3.14;
+
+kalau angka > 5 && pi < 4.0 {
+    salam("Tenun");
+} lain {
+    cetak("kecil");
+}
+
+selama angka > 0 {
+    angka = angka - 1;
+}

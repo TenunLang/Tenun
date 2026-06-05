@@ -1,0 +1,750 @@
+const std = @import("std");
+const ast = @import("../parser/ast.zig");
+const Diagnostics = @import("../diagnostics/diagnostics.zig").Diagnostics;
+
+pub const Value = union(enum) {
+    bulat: i64,
+    desimal: f64,
+    teks: []const u8,
+    bool: bool,
+    kosong,
+    array: []Value,
+};
+
+pub const OpCode = enum(u8) {
+    constant,
+    true_,
+    false_,
+    kosong_,
+    neg,
+    not,
+    add,
+    sub,
+    mul,
+    div,
+    mod,
+    eq,
+    neq,
+    lt,
+    gt,
+    le,
+    ge,
+    pop,
+    define_global,
+    get_global,
+    set_global,
+    get_local,
+    set_local,
+    jump,
+    jump_if_false,
+    loop,
+    call,
+    ret,
+    print,
+    array_make,
+    index_get,
+    index_set,
+    array_len,
+};
+
+const Chunk = struct {
+    code: std.ArrayList(u8),
+    consts: std.ArrayList(Value),
+
+    fn init(allocator: std.mem.Allocator) Chunk {
+        return .{ .code = std.ArrayList(u8).init(allocator), .consts = std.ArrayList(Value).init(allocator) };
+    }
+    fn deinit(self: *Chunk) void {
+        self.code.deinit();
+        self.consts.deinit();
+    }
+    fn emit(self: *Chunk, byte: u8) !void {
+        try self.code.append(byte);
+    }
+    fn emitOp(self: *Chunk, op: OpCode) !void {
+        try self.code.append(@intFromEnum(op));
+    }
+    fn emitU16(self: *Chunk, v: u16) !void {
+        try self.code.append(@intCast(v >> 8));
+        try self.code.append(@intCast(v & 0xff));
+    }
+    fn addConst(self: *Chunk, v: Value) !u16 {
+        try self.consts.append(v);
+        return @intCast(self.consts.items.len - 1);
+    }
+};
+
+const Function = struct {
+    name: []const u8,
+    arity: usize,
+    chunk: Chunk,
+};
+
+const Local = struct {
+    name: []const u8,
+    depth: i32,
+};
+
+const FnCompiler = struct {
+    chunk: *Chunk,
+    locals: [256]Local = undefined,
+    local_count: usize = 0,
+    scope_depth: i32 = 0,
+};
+
+const Compiler = struct {
+    allocator: std.mem.Allocator,
+    diags: *Diagnostics,
+    functions: std.ArrayList(Function),
+    fn_index: std.StringHashMap(usize),
+    cur: *FnCompiler = undefined,
+
+    fn init(allocator: std.mem.Allocator, diags: *Diagnostics) Compiler {
+        return .{
+            .allocator = allocator,
+            .diags = diags,
+            .functions = std.ArrayList(Function).init(allocator),
+            .fn_index = std.StringHashMap(usize).init(allocator),
+        };
+    }
+    fn deinit(self: *Compiler) void {
+        for (self.functions.items) |*f| f.chunk.deinit();
+        self.functions.deinit();
+        self.fn_index.deinit();
+    }
+
+    fn compileProgram(self: *Compiler, program: ast.Program) !void {
+        try self.functions.append(.{ .name = "utama", .arity = 0, .chunk = Chunk.init(self.allocator) });
+        for (program.stmts) |s| {
+            if (std.meta.activeTag(s.data) == .fungsi_decl) {
+                const f = s.data.fungsi_decl;
+                const idx = self.functions.items.len;
+                try self.functions.append(.{ .name = f.name, .arity = f.params.len, .chunk = Chunk.init(self.allocator) });
+                try self.fn_index.put(f.name, idx);
+            }
+        }
+
+        var main_fc = FnCompiler{ .chunk = &self.functions.items[0].chunk };
+        self.cur = &main_fc;
+        for (program.stmts) |s| {
+            if (std.meta.activeTag(s.data) != .fungsi_decl) try self.stmt(s);
+        }
+        try self.cur.chunk.emitOp(.kosong_);
+        try self.cur.chunk.emitOp(.ret);
+
+        for (program.stmts) |s| {
+            if (std.meta.activeTag(s.data) == .fungsi_decl) try self.compileFn(s.data.fungsi_decl);
+        }
+    }
+
+    fn compileFn(self: *Compiler, f: ast.Stmt.FungsiDecl) !void {
+        const idx = self.fn_index.get(f.name).?;
+        var fc = FnCompiler{ .chunk = &self.functions.items[idx].chunk };
+        self.cur = &fc;
+        fc.scope_depth = 1;
+        for (f.params) |p| _ = self.declareLocal(p.name);
+        for (f.body) |s| try self.stmt(s);
+        try self.cur.chunk.emitOp(.kosong_);
+        try self.cur.chunk.emitOp(.ret);
+    }
+
+    fn declareLocal(self: *Compiler, name: []const u8) usize {
+        const slot = self.cur.local_count;
+        self.cur.locals[slot] = .{ .name = name, .depth = self.cur.scope_depth };
+        self.cur.local_count += 1;
+        return slot;
+    }
+    fn resolveLocal(self: *Compiler, name: []const u8) ?usize {
+        var i = self.cur.local_count;
+        while (i > 0) {
+            i -= 1;
+            if (std.mem.eql(u8, self.cur.locals[i].name, name)) return i;
+        }
+        return null;
+    }
+    fn beginScope(self: *Compiler) void {
+        self.cur.scope_depth += 1;
+    }
+    fn endScope(self: *Compiler) !void {
+        self.cur.scope_depth -= 1;
+        while (self.cur.local_count > 0 and self.cur.locals[self.cur.local_count - 1].depth > self.cur.scope_depth) {
+            try self.cur.chunk.emitOp(.pop);
+            self.cur.local_count -= 1;
+        }
+    }
+
+    fn block(self: *Compiler, stmts: []*ast.Stmt) !void {
+        self.beginScope();
+        for (stmts) |s| try self.stmt(s);
+        try self.endScope();
+    }
+
+    fn stmt(self: *Compiler, s: *ast.Stmt) anyerror!void {
+        const c = self.cur.chunk;
+        switch (s.data) {
+            .var_decl => |d| {
+                try self.expr(d.value);
+                if (self.cur.scope_depth == 0) {
+                    const ni = try c.addConst(.{ .teks = d.name });
+                    try c.emitOp(.define_global);
+                    try c.emitU16(ni);
+                } else {
+                    _ = self.declareLocal(d.name);
+                }
+            },
+            .fungsi_decl => {},
+            .expr_stmt => |e| {
+                try self.expr(e);
+                try c.emitOp(.pop);
+            },
+            .block => |stmts| try self.block(stmts),
+            .if_stmt => |d| {
+                try self.expr(d.cond);
+                const then_jump = try self.emitJump(.jump_if_false);
+                try c.emitOp(.pop);
+                try self.block(d.then_block);
+                const else_jump = try self.emitJump(.jump);
+                try self.patchJump(then_jump);
+                try c.emitOp(.pop);
+                if (d.else_branch) |e| try self.stmt(e);
+                try self.patchJump(else_jump);
+            },
+            .while_stmt => |d| {
+                const loop_start = c.code.items.len;
+                try self.expr(d.cond);
+                const exit_jump = try self.emitJump(.jump_if_false);
+                try c.emitOp(.pop);
+                try self.block(d.body);
+                try self.emitLoop(loop_start);
+                try self.patchJump(exit_jump);
+                try c.emitOp(.pop);
+            },
+            .for_stmt => |d| {
+                self.beginScope();
+                try self.expr(d.start);
+                const slot_i = self.declareLocal(d.var_name);
+                try self.expr(d.end);
+                const slot_end = self.declareLocal("$end");
+                const loop_start = c.code.items.len;
+                try self.emitGetLocal(slot_i);
+                try self.emitGetLocal(slot_end);
+                try c.emitOp(.lt);
+                const exit_jump = try self.emitJump(.jump_if_false);
+                try c.emitOp(.pop);
+                try self.block(d.body);
+                try self.emitGetLocal(slot_i);
+                const one = try c.addConst(.{ .bulat = 1 });
+                try c.emitOp(.constant);
+                try c.emitU16(one);
+                try c.emitOp(.add);
+                try c.emitOp(.set_local);
+                try c.emit(@intCast(slot_i));
+                try c.emitOp(.pop);
+                try self.emitLoop(loop_start);
+                try self.patchJump(exit_jump);
+                try c.emitOp(.pop);
+                try self.endScope();
+            },
+            .return_stmt => |maybe| {
+                if (maybe) |e| try self.expr(e) else try c.emitOp(.kosong_);
+                try c.emitOp(.ret);
+            },
+        }
+    }
+
+    fn expr(self: *Compiler, e: *ast.Expr) anyerror!void {
+        const c = self.cur.chunk;
+        switch (e.data) {
+            .number => |s| {
+                const v: Value = if (std.mem.indexOfScalar(u8, s, '.') != null)
+                    .{ .desimal = std.fmt.parseFloat(f64, s) catch 0 }
+                else
+                    .{ .bulat = std.fmt.parseInt(i64, s, 10) catch 0 };
+                const i = try c.addConst(v);
+                try c.emitOp(.constant);
+                try c.emitU16(i);
+            },
+            .string => |s| {
+                const i = try c.addConst(.{ .teks = s[1 .. s.len - 1] });
+                try c.emitOp(.constant);
+                try c.emitU16(i);
+            },
+            .boolean => |b| try c.emitOp(if (b) .true_ else .false_),
+            .nil => try c.emitOp(.kosong_),
+            .ident => |name| {
+                if (self.resolveLocal(name)) |slot| {
+                    try self.emitGetLocal(slot);
+                } else {
+                    const i = try c.addConst(.{ .teks = name });
+                    try c.emitOp(.get_global);
+                    try c.emitU16(i);
+                }
+            },
+            .unary => |u| {
+                try self.expr(u.operand);
+                try c.emitOp(if (u.op == .neg) .neg else .not);
+            },
+            .binary => |b| {
+                if (b.op == .@"and") {
+                    try self.expr(b.left);
+                    const end_jump = try self.emitJump(.jump_if_false);
+                    try c.emitOp(.pop);
+                    try self.expr(b.right);
+                    try self.patchJump(end_jump);
+                    return;
+                }
+                if (b.op == .@"or") {
+                    try self.expr(b.left);
+                    const else_jump = try self.emitJump(.jump_if_false);
+                    const end_jump = try self.emitJump(.jump);
+                    try self.patchJump(else_jump);
+                    try c.emitOp(.pop);
+                    try self.expr(b.right);
+                    try self.patchJump(end_jump);
+                    return;
+                }
+                try self.expr(b.left);
+                try self.expr(b.right);
+                try c.emitOp(switch (b.op) {
+                    .add => .add,
+                    .sub => .sub,
+                    .mul => .mul,
+                    .div => .div,
+                    .mod => .mod,
+                    .eq => .eq,
+                    .neq => .neq,
+                    .lt => .lt,
+                    .gt => .gt,
+                    .le => .le,
+                    .ge => .ge,
+                    else => unreachable,
+                });
+            },
+            .call => |call| {
+                const name = call.callee.data.ident;
+                if (std.mem.eql(u8, name, "cetak")) {
+                    try self.expr(call.args[0]);
+                    try c.emitOp(.print);
+                    try c.emitOp(.kosong_);
+                    return;
+                }
+                if (std.mem.eql(u8, name, "panjang")) {
+                    try self.expr(call.args[0]);
+                    try c.emitOp(.array_len);
+                    return;
+                }
+                const idx = self.fn_index.get(name).?;
+                for (call.args) |a| try self.expr(a);
+                try c.emitOp(.call);
+                try c.emit(@intCast(idx));
+                try c.emit(@intCast(call.args.len));
+            },
+            .assign => |a| {
+                switch (a.target.data) {
+                    .ident => |name| {
+                        try self.expr(a.value);
+                        if (self.resolveLocal(name)) |slot| {
+                            try c.emitOp(.set_local);
+                            try c.emit(@intCast(slot));
+                        } else {
+                            const i = try c.addConst(.{ .teks = name });
+                            try c.emitOp(.set_global);
+                            try c.emitU16(i);
+                        }
+                    },
+                    .index => |ix| {
+                        try self.expr(ix.target);
+                        try self.expr(ix.idx);
+                        try self.expr(a.value);
+                        try c.emitOp(.index_set);
+                    },
+                    else => unreachable,
+                }
+            },
+            .array => |elems| {
+                for (elems) |el| try self.expr(el);
+                try c.emitOp(.array_make);
+                try c.emitU16(@intCast(elems.len));
+            },
+            .index => |ix| {
+                try self.expr(ix.target);
+                try self.expr(ix.idx);
+                try c.emitOp(.index_get);
+            },
+        }
+    }
+
+    fn emitGetLocal(self: *Compiler, slot: usize) !void {
+        try self.cur.chunk.emitOp(.get_local);
+        try self.cur.chunk.emit(@intCast(slot));
+    }
+    fn emitJump(self: *Compiler, op: OpCode) !usize {
+        try self.cur.chunk.emitOp(op);
+        try self.cur.chunk.emitU16(0xffff);
+        return self.cur.chunk.code.items.len - 2;
+    }
+    fn patchJump(self: *Compiler, offset: usize) !void {
+        const dist = self.cur.chunk.code.items.len - offset - 2;
+        self.cur.chunk.code.items[offset] = @intCast(dist >> 8);
+        self.cur.chunk.code.items[offset + 1] = @intCast(dist & 0xff);
+    }
+    fn emitLoop(self: *Compiler, loop_start: usize) !void {
+        try self.cur.chunk.emitOp(.loop);
+        const dist = self.cur.chunk.code.items.len - loop_start + 2;
+        try self.cur.chunk.emitU16(@intCast(dist));
+    }
+};
+
+const Frame = struct {
+    func: *Function,
+    ip: usize,
+    base: usize,
+};
+
+const stack_max = 1 << 16;
+
+const VM = struct {
+    allocator: std.mem.Allocator,
+    diags: *Diagnostics,
+    out: std.io.AnyWriter,
+    functions: []Function,
+    stack: []Value,
+    top: usize,
+    frames: std.ArrayList(Frame),
+    globals: std.StringHashMap(Value),
+    vals: std.heap.ArenaAllocator,
+
+    fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter, functions: []Function) !VM {
+        return .{
+            .allocator = allocator,
+            .diags = diags,
+            .out = out,
+            .functions = functions,
+            .stack = try allocator.alloc(Value, stack_max),
+            .top = 0,
+            .frames = std.ArrayList(Frame).init(allocator),
+            .globals = std.StringHashMap(Value).init(allocator),
+            .vals = std.heap.ArenaAllocator.init(allocator),
+        };
+    }
+    fn deinit(self: *VM) void {
+        self.allocator.free(self.stack);
+        self.frames.deinit();
+        self.globals.deinit();
+        self.vals.deinit();
+    }
+
+    inline fn push(self: *VM, v: Value) void {
+        self.stack[self.top] = v;
+        self.top += 1;
+    }
+    inline fn pop(self: *VM) Value {
+        self.top -= 1;
+        return self.stack[self.top];
+    }
+    inline fn peek(self: *VM) Value {
+        return self.stack[self.top - 1];
+    }
+
+    fn run(self: *VM) !void {
+        try self.frames.append(.{ .func = &self.functions[0], .ip = 0, .base = 0 });
+
+        var frame = &self.frames.items[self.frames.items.len - 1];
+        var code = frame.func.chunk.code.items;
+
+        while (true) {
+            const op: OpCode = @enumFromInt(code[frame.ip]);
+            frame.ip += 1;
+
+            switch (op) {
+                .constant => {
+                    const i = readU16(code, &frame.ip);
+                    self.push(frame.func.chunk.consts.items[i]);
+                },
+                .true_ => self.push(.{ .bool = true }),
+                .false_ => self.push(.{ .bool = false }),
+                .kosong_ => self.push(.kosong),
+                .neg => {
+                    const v = self.pop();
+                    self.push(switch (v) {
+                        .bulat => .{ .bulat = -v.bulat },
+                        .desimal => .{ .desimal = -v.desimal },
+                        else => unreachable,
+                    });
+                },
+                .not => {
+                    const v = self.pop();
+                    self.push(.{ .bool = !v.bool });
+                },
+                .add, .sub, .mul, .div, .mod, .lt, .gt, .le, .ge => try self.binary(op),
+                .eq => {
+                    const b = self.pop();
+                    const a = self.pop();
+                    self.push(.{ .bool = valueEql(a, b) });
+                },
+                .neq => {
+                    const b = self.pop();
+                    const a = self.pop();
+                    self.push(.{ .bool = !valueEql(a, b) });
+                },
+                .pop => _ = self.pop(),
+                .define_global => {
+                    const i = readU16(code, &frame.ip);
+                    const name = frame.func.chunk.consts.items[i].teks;
+                    try self.globals.put(name, self.pop());
+                },
+                .get_global => {
+                    const i = readU16(code, &frame.ip);
+                    const name = frame.func.chunk.consts.items[i].teks;
+                    self.push(self.globals.get(name).?);
+                },
+                .set_global => {
+                    const i = readU16(code, &frame.ip);
+                    const name = frame.func.chunk.consts.items[i].teks;
+                    try self.globals.put(name, self.peek());
+                },
+                .get_local => {
+                    const slot = code[frame.ip];
+                    frame.ip += 1;
+                    self.push(self.stack[frame.base + slot]);
+                },
+                .set_local => {
+                    const slot = code[frame.ip];
+                    frame.ip += 1;
+                    self.stack[frame.base + slot] = self.peek();
+                },
+                .jump => {
+                    const off = readU16(code, &frame.ip);
+                    frame.ip += off;
+                },
+                .jump_if_false => {
+                    const off = readU16(code, &frame.ip);
+                    if (!self.peek().bool) frame.ip += off;
+                },
+                .loop => {
+                    const off = readU16(code, &frame.ip);
+                    frame.ip -= off;
+                },
+                .print => {
+                    try self.printValue(self.pop());
+                    try self.out.writeByte('\n');
+                },
+                .array_make => {
+                    const n = readU16(code, &frame.ip);
+                    const arr = try self.vals.allocator().alloc(Value, n);
+                    var k: usize = n;
+                    while (k > 0) {
+                        k -= 1;
+                        arr[k] = self.pop();
+                    }
+                    self.push(.{ .array = arr });
+                },
+                .index_get => {
+                    const idx = self.pop();
+                    const target = self.pop();
+                    if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
+                    self.push(target.array[@intCast(idx.bulat)]);
+                },
+                .index_set => {
+                    const value = self.pop();
+                    const idx = self.pop();
+                    const target = self.pop();
+                    if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
+                    target.array[@intCast(idx.bulat)] = value;
+                    self.push(value);
+                },
+                .array_len => {
+                    const v = self.pop();
+                    self.push(.{ .bulat = @intCast(v.array.len) });
+                },
+                .call => {
+                    const fidx = code[frame.ip];
+                    const argc = code[frame.ip + 1];
+                    frame.ip += 2;
+                    const base = self.top - argc;
+                    try self.frames.append(.{ .func = &self.functions[fidx], .ip = 0, .base = base });
+                    frame = &self.frames.items[self.frames.items.len - 1];
+                    code = frame.func.chunk.code.items;
+                },
+                .ret => {
+                    const result = self.pop();
+                    const done = self.frames.pop().?;
+                    if (self.frames.items.len == 0) return;
+                    self.top = done.base;
+                    self.push(result);
+                    frame = &self.frames.items[self.frames.items.len - 1];
+                    code = frame.func.chunk.code.items;
+                },
+            }
+        }
+    }
+
+    fn binary(self: *VM, op: OpCode) !void {
+        const b = self.pop();
+        const a = self.pop();
+        if (std.meta.activeTag(a) == .teks and op == .add) {
+            const joined = try std.fmt.allocPrint(self.vals.allocator(), "{s}{s}", .{ a.teks, b.teks });
+            self.push(.{ .teks = joined });
+            return;
+        }
+        if (std.meta.activeTag(a) == .bulat) {
+            const x = a.bulat;
+            const y = b.bulat;
+            self.push(switch (op) {
+                .add => .{ .bulat = x + y },
+                .sub => .{ .bulat = x - y },
+                .mul => .{ .bulat = x * y },
+                .div => if (y == 0) return self.rt("pembagian dengan nol") else .{ .bulat = @divTrunc(x, y) },
+                .mod => if (y == 0) return self.rt("modulo dengan nol") else .{ .bulat = @rem(x, y) },
+                .lt => .{ .bool = x < y },
+                .gt => .{ .bool = x > y },
+                .le => .{ .bool = x <= y },
+                .ge => .{ .bool = x >= y },
+                else => unreachable,
+            });
+        } else {
+            const x = a.desimal;
+            const y = b.desimal;
+            self.push(switch (op) {
+                .add => .{ .desimal = x + y },
+                .sub => .{ .desimal = x - y },
+                .mul => .{ .desimal = x * y },
+                .div => .{ .desimal = x / y },
+                .mod => .{ .desimal = @rem(x, y) },
+                .lt => .{ .bool = x < y },
+                .gt => .{ .bool = x > y },
+                .le => .{ .bool = x <= y },
+                .ge => .{ .bool = x >= y },
+                else => unreachable,
+            });
+        }
+    }
+
+    fn printValue(self: *VM, v: Value) !void {
+        switch (v) {
+            .bulat => |n| try self.out.print("{d}", .{n}),
+            .desimal => |n| try self.out.print("{d}", .{n}),
+            .teks => |s| try self.out.writeAll(s),
+            .bool => |b| try self.out.writeAll(if (b) "benar" else "salah"),
+            .kosong => try self.out.writeAll("kosong"),
+            .array => |arr| {
+                try self.out.writeByte('[');
+                for (arr, 0..) |el, i| {
+                    if (i > 0) try self.out.writeAll(", ");
+                    try self.printValue(el);
+                }
+                try self.out.writeByte(']');
+            },
+        }
+    }
+
+    fn rt(self: *VM, message: []const u8) anyerror {
+        self.diags.report(.err, 0, 0, message) catch {};
+        return error.RuntimeError;
+    }
+};
+
+fn readU16(code: []const u8, ip: *usize) u16 {
+    const hi: u16 = code[ip.*];
+    const lo: u16 = code[ip.* + 1];
+    ip.* += 2;
+    return (hi << 8) | lo;
+}
+
+fn valueEql(a: Value, b: Value) bool {
+    if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
+    return switch (a) {
+        .bulat => a.bulat == b.bulat,
+        .desimal => a.desimal == b.desimal,
+        .teks => std.mem.eql(u8, a.teks, b.teks),
+        .bool => a.bool == b.bool,
+        .kosong => true,
+        .array => blk: {
+            if (a.array.len != b.array.len) break :blk false;
+            for (a.array, b.array) |x, y| if (!valueEql(x, y)) break :blk false;
+            break :blk true;
+        },
+    };
+}
+
+pub fn run(allocator: std.mem.Allocator, program: ast.Program, diags: *Diagnostics, out: std.io.AnyWriter) !void {
+    var compiler = Compiler.init(allocator, diags);
+    defer compiler.deinit();
+    try compiler.compileProgram(program);
+    if (diags.hasErrors()) return;
+
+    var vm = try VM.init(allocator, diags, out, compiler.functions.items);
+    defer vm.deinit();
+    try vm.run();
+}
+
+const Lexer = @import("../lexer/lexer.zig").Lexer;
+const parser = @import("../parser/parser.zig");
+const sema = @import("../sema/sema.zig");
+
+fn runToString(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
+    var diags = Diagnostics.init(allocator);
+    defer diags.deinit();
+
+    var lexer = Lexer.init(source, &diags);
+    const tokens = try lexer.tokenize(allocator);
+    defer allocator.free(tokens);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const program = try parser.parse(arena.allocator(), tokens, &diags);
+    try sema.check(allocator, program, &diags);
+    try std.testing.expect(!diags.hasErrors());
+
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+    try run(allocator, program, &diags, buf.writer().any());
+    return buf.toOwnedSlice();
+}
+
+fn expectOutput(source: []const u8, expected: []const u8) !void {
+    const out = try runToString(std.testing.allocator, source);
+    defer std.testing.allocator.free(out);
+    try std.testing.expectEqualStrings(expected, out);
+}
+
+test "vm: cetak teks dan aritmatika" {
+    try expectOutput("cetak(\"halo\"); cetak(1 + 2 * 3);", "halo\n7\n");
+}
+test "vm: konkatenasi" {
+    try expectOutput("biar n = \"Tenun\"; cetak(\"Halo, \" + n);", "Halo, Tenun\n");
+}
+test "vm: kalau lain" {
+    try expectOutput("biar x: bulat = 3; kalau x > 5 { cetak(\"besar\"); } lain { cetak(\"kecil\"); }", "kecil\n");
+}
+test "vm: selama" {
+    try expectOutput("biar n: bulat = 3; selama n > 0 { cetak(n); n = n - 1; }", "3\n2\n1\n");
+}
+test "vm: untuk" {
+    try expectOutput("untuk i dari 1 sampai 4 { cetak(i); }", "1\n2\n3\n");
+}
+test "vm: fungsi rekursi" {
+    try expectOutput(
+        \\fungsi faktorial(n: bulat): bulat {
+        \\  kalau n <= 1 { kembali 1; }
+        \\  kembali n * faktorial(n - 1);
+        \\}
+        \\cetak(faktorial(5));
+    , "120\n");
+}
+test "vm: fungsi panggil sebelum definisi" {
+    try expectOutput("cetak(kuadrat(4)); fungsi kuadrat(x: bulat): bulat { kembali x * x; }", "16\n");
+}
+test "vm: logika short-circuit" {
+    try expectOutput("cetak(benar && salah); cetak(benar || salah); cetak(!benar);", "salah\nbenar\nsalah\n");
+}
+test "vm: larik dan panjang" {
+    try expectOutput("biar a: []bulat = [10, 20, 30]; cetak(a[1]); cetak(panjang(a)); cetak(a);", "20\n3\n[10, 20, 30]\n");
+}
+test "vm: isi larik lewat untuk" {
+    try expectOutput(
+        \\biar a: []bulat = [0, 0, 0];
+        \\untuk i dari 0 sampai 3 { a[i] = i * i; }
+        \\cetak(a);
+    , "[0, 1, 4]\n");
+}

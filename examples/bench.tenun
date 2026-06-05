@@ -1,0 +1,5 @@
+biar total: bulat = 0;
+untuk i dari 0 sampai 10000000 {
+  total = total + i;
+}
+cetak(total);
