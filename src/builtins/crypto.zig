@@ -54,3 +54,16 @@ pub fn acak(a: std.mem.Allocator, n: usize) ![]u8 {
     std.crypto.random.bytes(raw);
     return toHex(a, raw);
 }
+
+pub fn sha1Raw(a: std.mem.Allocator, data: []const u8) ![]u8 {
+    var out: [20]u8 = undefined;
+    std.crypto.hash.Sha1.hash(data, &out, .{});
+    return a.dupe(u8, &out);
+}
+
+pub fn xorBytes(a: std.mem.Allocator, x: []const u8, y: []const u8) ![]u8 {
+    const n = @min(x.len, y.len);
+    const buf = try a.alloc(u8, n);
+    for (0..n) |i| buf[i] = x[i] ^ y[i];
+    return buf;
+}

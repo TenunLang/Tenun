@@ -778,6 +778,8 @@ const VM = struct {
             40 => .{ .teks = crypto.acak(a, @intCast(args[0].bulat)) catch return self.rt("gagal acak") },
             41 => .{ .teks = binmod.keByte(a, args[0].bulat, args[1].bulat, args[2].bool) catch return self.rt("gagal keByte") },
             42 => .{ .bulat = binmod.bacaInt(args[0].teks, args[1].bulat, args[2].bulat, args[3].bool) },
+            43 => .{ .teks = crypto.sha1Raw(a, args[0].teks) catch return self.rt("gagal sha1Raw") },
+            44 => .{ .teks = crypto.xorBytes(a, args[0].teks, args[1].teks) catch return self.rt("gagal xor") },
             else => unreachable,
         };
     }

@@ -357,6 +357,7 @@ const Parser = struct {
                     'n' => '\n',
                     't' => '\t',
                     'r' => '\r',
+                    '0' => 0,
                     '"' => '"',
                     '\\' => '\\',
                     else => content[i],

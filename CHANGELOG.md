@@ -2,6 +2,14 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Primitif protokol: sha1Raw, xor, escape `\0` (SELESAI)
+
+Melengkapi bahan untuk menulis klien protokol biner (mis. MySQL) sebagai modul Tenun.
+
+- Builtin id 43 `sha1Raw(data)` (SHA-1 byte mentah 20 byte, bukan hex), id 44 `xor(a, b)` (XOR byte-per-byte) di `src/builtins/crypto.zig`.
+- Lexer/parser: escape `\0` (null byte) di literal teks.
+- **Terbukti:** modul MySQL (`modul-mysql/mysql.tenun`, ditulis murni dengan Tenun) berhasil connect + autentikasi `mysql_native_password` + `SELECT VERSION()` ke MariaDB 11.4.10 lokal. Driver DB pertama di bahasa Tenun, hanya memakai builtin inti (TCP, crypto, encode biner, teks).
+
 ## 2026-06-05 — Package manager: `tenun add` + `impor` (SELESAI)
 
 - **`tenun add <nama>`** — `git clone --depth 1` modul dari `github.com/TenunLang/modul-<nama>` ke `./tenun_modul/<nama>`. `tenun add <url>` untuk repo apa pun. (`driver.add`)

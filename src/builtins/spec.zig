@@ -54,6 +54,8 @@ pub const list = [_]Spec{
     .{ .name = "acak", .params = &.{.bulat}, .ret = .teks },
     .{ .name = "keByte", .params = &.{ .bulat, .bulat, .bool }, .ret = .teks },
     .{ .name = "bacaInt", .params = &.{ .teks, .bulat, .bulat, .bool }, .ret = .bulat },
+    .{ .name = "sha1Raw", .params = &.{.teks}, .ret = .teks },
+    .{ .name = "xor", .params = &.{ .teks, .teks }, .ret = .teks },
 };
 
 pub const layani_id = 9;

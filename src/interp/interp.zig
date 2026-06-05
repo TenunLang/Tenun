@@ -453,6 +453,8 @@ pub const Interpreter = struct {
             40 => .{ .teks = crypto.acak(a, @intCast(args[0].bulat)) catch return self.runtimeError(pos, "gagal acak") },
             41 => .{ .teks = binary.keByte(a, args[0].bulat, args[1].bulat, args[2].bool) catch return self.runtimeError(pos, "gagal keByte") },
             42 => .{ .bulat = binary.bacaInt(args[0].teks, args[1].bulat, args[2].bulat, args[3].bool) },
+            43 => .{ .teks = crypto.sha1Raw(a, args[0].teks) catch return self.runtimeError(pos, "gagal sha1Raw") },
+            44 => .{ .teks = crypto.xorBytes(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal xor") },
             else => unreachable,
         };
     }

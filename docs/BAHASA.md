@@ -37,7 +37,7 @@ selama angka > 0 {
 - Blok kode dibungkus kurung kurawal `{ }`. Blok tidak diakhiri titik koma.
 - Komentar satu baris diawali `//` sampai akhir baris.
 - File sumber berekstensi `.tenun`.
-- Teks mendukung escape: `\"` (kutip), `\\` (backslash), `\n` (baris baru), `\t` (tab), `\r`.
+- Teks mendukung escape: `\"` (kutip), `\\` (backslash), `\n` (baris baru), `\t` (tab), `\r`, `\0` (null byte).
 
 ## 3. Variabel & Konstanta [JALAN]
 
@@ -214,6 +214,8 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `base64(data: teks): teks` | encode base64 | `[JALAN]` |
 | `dariBase64(teks): teks` | decode base64 | `[JALAN]` |
 | `acak(jumlah: bulat): teks` | byte acak aman (hex, 2×jumlah char) | `[JALAN]` |
+| `sha1Raw(data: teks): teks` | SHA-1 byte mentah (20 byte, untuk protokol) | `[JALAN]` |
+| `xor(a: teks, b: teks): teks` | XOR byte-per-byte | `[JALAN]` |
 | `keByte(nilai: bulat, lebar: bulat, besar: bool): teks` | encode integer ke `lebar` byte (besar=big-endian) | `[JALAN]` |
 | `bacaInt(data: teks, offset: bulat, lebar: bulat, besar: bool): bulat` | baca integer dari byte | `[JALAN]` |
 | `jsonTeks(json: teks, kunci: teks): teks` | ambil field teks dari JSON (top-level) | `[JALAN]` |
