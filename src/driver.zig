@@ -135,7 +135,7 @@ pub fn build(allocator: std.mem.Allocator, path: []const u8, keep_c: bool) !void
     try stdout.print("[tenun] build sukses: {s}\n", .{exe_path});
 }
 
-pub fn add(allocator: std.mem.Allocator, arg: []const u8) !void {
+pub fn add(allocator: std.mem.Allocator, arg: []const u8) anyerror!void {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
@@ -168,7 +168,34 @@ pub fn add(allocator: std.mem.Allocator, arg: []const u8) !void {
         return;
     }
     tambahKeManifest(allocator, name) catch {};
+    pasangDependensi(allocator, name) catch {};
     try stdout.print("[tenun] modul '{s}' terpasang di {s} — pakai dengan: impor \"{s}\";\n", .{ name, dest, name });
+}
+
+// Pasang dependensi modul (bidang "butuh" di tenun.json modul) secara rekursif.
+fn pasangDependensi(allocator: std.mem.Allocator, name: []const u8) anyerror!void {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const mpath = try std.fmt.allocPrint(a, "tenun_modul/{s}/tenun.json", .{name});
+    const data = readFile(a, mpath) catch return;
+    const root = std.json.parseFromSliceLeaky(std.json.Value, a, data, .{}) catch return;
+    if (root != .object) return;
+    const butuh = root.object.get("butuh") orelse return;
+    if (butuh != .object) return;
+
+    var it = butuh.object.iterator();
+    while (it.next()) |entry| {
+        const dep = entry.key_ptr.*;
+        const destdep = try std.fmt.allocPrint(a, "tenun_modul/{s}", .{dep});
+        if (std.fs.cwd().access(destdep, .{})) {
+            continue; // sudah terpasang
+        } else |_| {}
+        const dep_owned = try allocator.dupe(u8, dep);
+        defer allocator.free(dep_owned);
+        add(allocator, dep_owned) catch {};
+    }
 }
 
 fn tambahKeManifest(allocator: std.mem.Allocator, name: []const u8) !void {

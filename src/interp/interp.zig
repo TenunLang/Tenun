@@ -471,6 +471,13 @@ pub const Interpreter = struct {
             },
             46 => .{ .bulat = std.fmt.parseInt(i64, std.mem.trim(u8, args[0].teks, " \t\r\n"), 10) catch 0 },
             47 => .{ .teks = std.fmt.allocPrint(a, "{d}", .{args[0].bulat}) catch return self.runtimeError(pos, "kehabisan memori") },
+            48 => blk: {
+                const src = args[0].array;
+                const arr = a.alloc(Value, src.len + 1) catch return self.runtimeError(pos, "kehabisan memori");
+                for (src, 0..) |v, i| arr[i] = v;
+                arr[src.len] = args[1];
+                break :blk .{ .array = arr };
+            },
             else => unreachable,
         };
     }
