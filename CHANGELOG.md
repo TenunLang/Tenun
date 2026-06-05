@@ -2,6 +2,15 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Encode/decode integer biner (SELESAI)
+
+Fondasi untuk membangun klien protokol biner (Postgres/MySQL) sebagai modul Tenun.
+
+- `src/builtins/binary.zig` — `keByte(nilai, lebar, besar)` encode integer ke `lebar` byte (1-8), big-endian bila `besar` benar (Postgres) atau little-endian (MySQL). `bacaInt(data, offset, lebar, besar)` baca integer unsigned dari byte.
+- Builtin id 41 `keByte`, 42 `bacaInt`. Dispatch interp+VM (import VM dinamai `binmod` agar tidak bentrok dengan method `binary`).
+- Verified: `keByte(196608,4,benar)` roundtrip = 196608; little vs big-endian beda (513 LE dibaca BE = 258).
+- Struktur repo: proyek inti pindah ke folder `TenunLang/` (workspace `Tenun/` untuk modul). CI: `.github/workflows/release.yml` build Linux+Windows, auto tag & release.
+
 ## 2026-06-05 — Rename: Tenu → Tenun
 
 Nama bahasa diperbaiki jadi **Tenun** (bukan Tenu). Rename menyeluruh kata utuh `Tenu`/`tenu` → `Tenun`/`tenun` di semua kode/docs/skill/memory. Binary `tenun`, package `.tenun`, ekstensi file `.tenun`, skill dir `tenun-spec`, memory `tenun-*`. Fingerprint build.zig.zon berubah → `0x7c8391e5737e79ae` (name baru). Teks user-facing pakai Bahasa Indonesia formal.

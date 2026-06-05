@@ -52,6 +52,8 @@ pub const list = [_]Spec{
     .{ .name = "base64", .params = &.{.teks}, .ret = .teks },
     .{ .name = "dariBase64", .params = &.{.teks}, .ret = .teks },
     .{ .name = "acak", .params = &.{.bulat}, .ret = .teks },
+    .{ .name = "keByte", .params = &.{ .bulat, .bulat, .bool }, .ret = .teks },
+    .{ .name = "bacaInt", .params = &.{ .teks, .bulat, .bulat, .bool }, .ret = .bulat },
 };
 
 pub const layani_id = 9;

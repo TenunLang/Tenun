@@ -191,6 +191,8 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `base64(data: teks): teks` | encode base64 | `[JALAN]` |
 | `dariBase64(teks): teks` | decode base64 | `[JALAN]` |
 | `acak(jumlah: bulat): teks` | byte acak aman (hex, 2×jumlah char) | `[JALAN]` |
+| `keByte(nilai: bulat, lebar: bulat, besar: bool): teks` | encode integer ke `lebar` byte (besar=big-endian) | `[JALAN]` |
+| `bacaInt(data: teks, offset: bulat, lebar: bulat, besar: bool): bulat` | baca integer dari byte | `[JALAN]` |
 | `jsonTeks(json: teks, kunci: teks): teks` | ambil field teks dari JSON (top-level) | `[JALAN]` |
 | `jsonAngka(json: teks, kunci: teks): bulat` | ambil field angka dari JSON | `[JALAN]` |
 | `jsonBool(json: teks, kunci: teks): bool` | ambil field bool dari JSON | `[JALAN]` |

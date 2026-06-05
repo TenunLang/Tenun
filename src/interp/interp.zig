@@ -8,6 +8,7 @@ const fs = @import("../builtins/fs.zig");
 const json = @import("../builtins/json.zig");
 const kv = @import("../builtins/kv.zig");
 const crypto = @import("../builtins/crypto.zig");
+const binary = @import("../builtins/binary.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -450,6 +451,8 @@ pub const Interpreter = struct {
             38 => .{ .teks = crypto.base64Enkode(a, args[0].teks) catch return self.runtimeError(pos, "gagal base64") },
             39 => .{ .teks = crypto.base64Dekode(a, args[0].teks) catch return self.runtimeError(pos, "base64 tidak valid") },
             40 => .{ .teks = crypto.acak(a, @intCast(args[0].bulat)) catch return self.runtimeError(pos, "gagal acak") },
+            41 => .{ .teks = binary.keByte(a, args[0].bulat, args[1].bulat, args[2].bool) catch return self.runtimeError(pos, "gagal keByte") },
+            42 => .{ .bulat = binary.bacaInt(args[0].teks, args[1].bulat, args[2].bulat, args[3].bool) },
             else => unreachable,
         };
     }
