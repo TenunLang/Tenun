@@ -77,15 +77,17 @@ tenun add mysql          # clone github.com/TenunLang/modul-mysql ke ./tenun_mod
 tenun add https://github.com/akun/repo   # atau URL repo apa pun
 ```
 
-Pakai modul di kode dengan pernyataan `impor` (satu per baris):
+Ada dua bentuk `impor` (satu per baris):
 
 ```tenun
-impor "mysql";
-
-biar koneksi: bulat = sambungMysql("localhost", 3306);
+impor "mysql";              // modul terpasang (dari tenun_modul/)
+impor "./lib/util.tenun";   // berkas lokal (relatif berkas saat ini)
 ```
 
-`impor "nama";` memuat berkas `tenun_modul/nama/nama.tenun` (atau `tenun_modul/nama.tenun`) dan menjadikan fungsi top-level modul tersedia di program. Modul ditulis dalam bahasa Tenun biasa, memanfaatkan builtin inti (TCP, kripto, encode biner, dll).
+- **Modul**: nama polos (mis. `"mysql"`) → dimuat dari `tenun_modul/<nama>` (entry ditentukan `berkas` di `tenun.json` modul).
+- **Berkas lokal**: diawali `./` atau `../`, mengandung `/`, atau berakhiran `.tenun` → dimuat relatif terhadap berkas yang mengimpor (ekstensi `.tenun` otomatis bila tidak ditulis).
+
+Impor bersifat **rekursif** (berkas yang diimpor boleh mengimpor lagi) dan aman dari duplikasi/siklus. Fungsi top-level dari semua berkas digabung sehingga dapat dipanggil langsung. Inilah cara membagi program menjadi banyak berkas, mirip Node.js. Modul ditulis dalam bahasa Tenun biasa, memanfaatkan builtin inti (TCP, kripto, encode biner, dll).
 
 `tenun add` juga mencatat dependensi di `tenun.json` proyek (dibuat otomatis bila belum ada):
 

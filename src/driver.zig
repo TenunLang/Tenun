@@ -220,8 +220,15 @@ fn tambahKeManifest(allocator: std.mem.Allocator, name: []const u8) !void {
     try f.writeAll(buf.items);
 }
 
-fn loadModule(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
-    // 1) entry dari manifest tenun.json ("berkas")
+fn imporLokal(spec: []const u8) bool {
+    return std.mem.startsWith(u8, spec, "./") or
+        std.mem.startsWith(u8, spec, "../") or
+        std.mem.endsWith(u8, spec, ".tenun") or
+        std.mem.indexOfScalar(u8, spec, '/') != null;
+}
+
+// Path file entry untuk sebuah modul terpasang (baca manifest "berkas").
+fn modulEntryPath(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
     {
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
@@ -230,34 +237,47 @@ fn loadModule(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
         if (readFile(a, mpath)) |data| {
             if (std.json.parseFromSliceLeaky(std.json.Value, a, data, .{})) |root| {
                 if (root == .object) if (root.object.get("berkas")) |b| if (b == .string) {
-                    const fp = try std.fmt.allocPrint(a, "tenun_modul/{s}/{s}", .{ name, b.string });
-                    if (std.fs.cwd().access(fp, .{})) {
-                        return readFile(allocator, fp);
-                    } else |_| {}
+                    return std.fmt.allocPrint(allocator, "tenun_modul/{s}/{s}", .{ name, b.string });
                 };
             } else |_| {}
         } else |_| {}
     }
-    // 2) fallback: tenun_modul/<nama>/<nama>.tenun
     const p1 = try std.fmt.allocPrint(allocator, "tenun_modul/{s}/{s}.tenun", .{ name, name });
-    defer allocator.free(p1);
     if (std.fs.cwd().access(p1, .{})) {
-        return readFile(allocator, p1);
+        return p1;
     } else |_| {}
-    // 3) fallback: tenun_modul/<nama>.tenun
-    const p2 = try std.fmt.allocPrint(allocator, "tenun_modul/{s}.tenun", .{name});
-    defer allocator.free(p2);
-    return readFile(allocator, p2);
+    allocator.free(p1);
+    return std.fmt.allocPrint(allocator, "tenun_modul/{s}.tenun", .{name});
 }
 
-fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    const main_src = try readFile(allocator, path);
-    defer allocator.free(main_src);
+// Resolusi target impor menjadi path file (caller membebaskan).
+fn resolveImpor(allocator: std.mem.Allocator, base_dir: []const u8, spec: []const u8) ![]u8 {
+    if (imporLokal(spec)) {
+        if (std.mem.endsWith(u8, spec, ".tenun")) {
+            return std.fs.path.join(allocator, &.{ base_dir, spec });
+        }
+        const withext = try std.fmt.allocPrint(allocator, "{s}.tenun", .{spec});
+        defer allocator.free(withext);
+        return std.fs.path.join(allocator, &.{ base_dir, withext });
+    }
+    return modulEntryPath(allocator, spec);
+}
 
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
+fn expand(allocator: std.mem.Allocator, file_path: []const u8, out: *std.ArrayList(u8), seen: *std.StringHashMap(void)) !void {
+    if (seen.contains(file_path)) return;
+    try seen.put(try allocator.dupe(u8, file_path), {});
 
-    var lines = std.mem.splitScalar(u8, main_src, '\n');
+    const src = readFile(allocator, file_path) catch {
+        try out.appendSlice("// tidak dapat memuat: ");
+        try out.appendSlice(file_path);
+        try out.append('\n');
+        return;
+    };
+    defer allocator.free(src);
+
+    const base_dir = std.fs.path.dirname(file_path) orelse ".";
+
+    var lines = std.mem.splitScalar(u8, src, '\n');
     while (lines.next()) |line| {
         const t = std.mem.trim(u8, line, " \t\r");
         if (std.mem.startsWith(u8, t, "impor \"")) {
@@ -267,21 +287,34 @@ fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
                 try out.append('\n');
                 continue;
             };
-            const name = rest[0..end];
-            const mod = loadModule(allocator, name) catch {
-                try out.appendSlice("// modul tidak ditemukan: ");
-                try out.appendSlice(name);
+            const spec = rest[0..end];
+            const target = resolveImpor(allocator, base_dir, spec) catch {
+                try out.appendSlice("// impor gagal: ");
+                try out.appendSlice(spec);
                 try out.append('\n');
                 continue;
             };
-            defer allocator.free(mod);
-            try out.appendSlice(mod);
-            try out.append('\n');
+            defer allocator.free(target);
+            try expand(allocator, target, out, seen);
         } else {
             try out.appendSlice(line);
             try out.append('\n');
         }
     }
+}
+
+fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    var out = std.ArrayList(u8).init(allocator);
+    errdefer out.deinit();
+
+    var seen = std.StringHashMap(void).init(allocator);
+    defer {
+        var it = seen.keyIterator();
+        while (it.next()) |k| allocator.free(k.*);
+        seen.deinit();
+    }
+
+    try expand(allocator, path, &out, &seen);
     return out.toOwnedSlice();
 }
 

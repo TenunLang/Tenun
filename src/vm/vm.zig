@@ -780,6 +780,20 @@ const VM = struct {
             42 => .{ .bulat = binmod.bacaInt(args[0].teks, args[1].bulat, args[2].bulat, args[3].bool) },
             43 => .{ .teks = crypto.sha1Raw(a, args[0].teks) catch return self.rt("gagal sha1Raw") },
             44 => .{ .teks = crypto.xorBytes(a, args[0].teks, args[1].teks) catch return self.rt("gagal xor") },
+            45 => blk: {
+                const sid: usize = @intCast(args[0].bulat);
+                const n: usize = @intCast(args[1].bulat);
+                const buf = a.alloc(u8, n) catch return self.rt("kehabisan memori");
+                var got: usize = 0;
+                if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
+                    while (got < n) {
+                        const r = s.read(buf[got..]) catch break;
+                        if (r == 0) break;
+                        got += r;
+                    }
+                };
+                break :blk Value{ .teks = buf[0..got] };
+            },
             else => unreachable,
         };
     }

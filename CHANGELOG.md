@@ -2,6 +2,16 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Impor berkas lokal (multi-berkas) (SELESAI)
+
+`impor` kini mendukung berkas lokal selain modul, dengan resolusi rekursif — bisa membagi program ke banyak berkas (ala Node.js).
+
+- `impor "./x.tenun"` / `"../y"` / `"lib/z.tenun"` → berkas lokal relatif terhadap berkas pengimpor (ekstensi `.tenun` otomatis). `impor "mysql"` → modul dari `tenun_modul/`.
+- Loader (`driver.zig`) di-refactor: `expand` rekursif + set `seen` (anti duplikasi/siklus), `resolveImpor`, `modulEntryPath`, `imporLokal`. Resolusi relatif memakai direktori berkas saat ini (`std.fs.path`).
+- Modul pun bisa multi-berkas: entry-nya mengimpor berkas lain di folder modul (mis. `modul-mysql/src/mysql.tenun` mengimpor `./lenenc.tenun`).
+- Verified: app → `./lib/teks.tenun` → `./matematika.tenun` (bersarang) jalan; modul mysql multi-berkas query MariaDB jalan.
+- Workflow: hapus target macOS (hanya Linux + Windows); perbaiki output NSIS (OutFile absolut).
+
 ## 2026-06-05 — Manifest proyek `tenun.json` (SELESAI)
 
 - `tenun add <nama>` kini membuat/memperbarui `tenun.json` proyek (ala package.json): menambah `<nama>` ke `butuh` dengan rentang versi `^<versi-modul>` (versi dibaca dari `tenun_modul/<nama>/tenun.json`). (`driver.tambahKeManifest`, std.json, output rapi indent-2)
