@@ -72,6 +72,7 @@ pub const list = [_]Spec{
     .{ .name = "kirimAman", .params = &.{ .bulat, .teks }, .ret = .kosong },
     .{ .name = "terimaAman", .params = &.{ .bulat, .bulat }, .ret = .teks },
     .{ .name = "tutupAman", .params = &.{.bulat}, .ret = .kosong },
+    .{ .name = "layaniSoket", .params = &.{.bulat}, .ret = .kosong },
 };
 
 pub const layani_id = 9;

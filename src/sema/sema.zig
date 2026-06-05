@@ -221,8 +221,10 @@ const Sema = struct {
             },
             .array => |elems| {
                 if (elems.len == 0) {
-                    try self.report(expr.pos, "larik kosong belum didukung (tipe elemen tidak bisa disimpulkan)");
-                    return null;
+                    // Larik kosong: elemen bertipe dinamis (cocok dengan []T mana pun).
+                    const el = try self.type_arena.allocator().create(Type);
+                    el.* = .dinamis;
+                    return .{ .array = el };
                 }
                 const first = try self.checkExpr(elems[0]);
                 if (first == null) return null;

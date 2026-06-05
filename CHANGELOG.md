@@ -2,6 +2,12 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Server soket mentah (layaniSoket) untuk WebSocket/protokol kustom
+
+- Builtin `layaniSoket(port): kosong` (61) — server TCP mentah, thread-per-koneksi, tiap koneksi panggil fungsi `koneksi(soket: bulat): kosong`. Soket dipakai dgn terima/terimaPasti/kirim/tutup yang sudah ada. Total builtin id 0-61.
+- Memungkinkan modul-websocket (handshake RFC 6455 + frame) ditulis murni Tenun. Terbukti live (echo, masked frames, 101 upgrade).
+- Catatan SSL/HTTPS: Zig std belum punya TLS server -> terminasi TLS pakai reverse proxy (Caddy/nginx) di depan; server Tenun jalan HTTP di belakang.
+
 ## 2026-06-05 — First-class functions (nilai fungsi) + tipe dinamis
 
 - Fungsi jadi nilai: nama fungsi top-level bisa disimpan/dioper. Tipe `fungsi`. `biar op: fungsi = tambah; op(3,4);`.

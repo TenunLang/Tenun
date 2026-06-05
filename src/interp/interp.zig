@@ -337,6 +337,30 @@ pub const Interpreter = struct {
         return "";
     }
 
+    // Server soket mentah (single-thread): tiap koneksi panggil 'koneksi(soket)'.
+    fn serveSoket(self: *Interpreter, port: u16) Error!Value {
+        const z = ast.Pos{ .line = 0, .column = 0 };
+        const fn_stmt = self.functions.get("koneksi") orelse return self.runtimeError(z, "server soket butuh fungsi 'koneksi(soket: bulat): kosong'");
+        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.runtimeError(z, "alamat tidak valid");
+        var net_server = addr.listen(.{ .reuse_address = true }) catch return self.runtimeError(z, "gagal mendengarkan di port");
+        std.io.getStdErr().writer().print("[tenun] server soket di port {d}\n", .{port}) catch {};
+        while (true) {
+            const conn = net_server.accept() catch continue;
+            self.conns.append(conn.stream) catch {
+                conn.stream.close();
+                continue;
+            };
+            const handle: i64 = @intCast(self.conns.items.len - 1);
+            _ = self.invokeUser(fn_stmt, &.{.{ .bulat = handle }}) catch {};
+            const idx: usize = @intCast(handle);
+            if (self.conns.items[idx]) |s| {
+                s.close();
+                self.conns.items[idx] = null;
+            }
+        }
+        return .kosong;
+    }
+
     fn serve(self: *Interpreter, port: u16) Error!Value {
         const z = ast.Pos{ .line = 0, .column = 0 };
         const fn_stmt = self.functions.get("tangani") orelse return self.runtimeError(z, "server butuh fungsi 'tangani(metode: teks, jalur: teks, badan: teks): teks'");
@@ -398,6 +422,7 @@ pub const Interpreter = struct {
                 break :blk .kosong;
             },
             9 => self.serve(@intCast(args[0].bulat)),
+            61 => self.serveSoket(@intCast(args[0].bulat)),
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk .kosong;

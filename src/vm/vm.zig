@@ -769,6 +769,7 @@ const VM = struct {
                 break :blk Value.kosong;
             },
             9 => self.serve(@intCast(args[0].bulat)),
+            61 => self.serveSoket(@intCast(args[0].bulat)),
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk Value.kosong;
@@ -954,6 +955,37 @@ const VM = struct {
         return .kosong;
     }
 
+    // Server soket mentah: tiap koneksi dapat thread + VM sendiri, lalu memanggil
+    // fungsi 'koneksi(soket: bulat)'. Dipakai untuk WebSocket/protokol kustom.
+    fn serveSoket(self: *VM, port: u16) !Value {
+        const koneksi_idx = blk: {
+            for (self.functions, 0..) |f, i| {
+                if (std.mem.eql(u8, f.name, "koneksi")) break :blk i;
+            }
+            return self.rt("server soket butuh fungsi 'koneksi(soket: bulat): kosong'");
+        };
+        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
+        var listener = addr.listen(.{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
+        std.io.getStdErr().writer().print("[tenun] server soket di port {d}\n", .{port}) catch {};
+
+        while (true) {
+            const conn = listener.accept() catch continue;
+            const ctx = SoketConnCtx{
+                .allocator = self.allocator,
+                .diags = self.diags,
+                .out = self.out,
+                .functions = self.functions,
+                .koneksi_idx = koneksi_idx,
+                .src_globals = self.global_slots,
+                .stream = conn.stream,
+            };
+            _ = std.Thread.spawn(.{}, soketConnLoop, .{ctx}) catch {
+                conn.stream.close();
+            };
+        }
+        return .kosong;
+    }
+
     fn handleConn(self: *VM, conn: std.net.Server.Connection, tangani_idx: usize) void {
         defer conn.stream.close();
         var buf: [65536]u8 = undefined;
@@ -1033,6 +1065,31 @@ const WorkerCtx = struct {
     src_globals: []Value,
     listener: *std.net.Server,
 };
+
+const SoketConnCtx = struct {
+    allocator: std.mem.Allocator,
+    diags: *Diagnostics,
+    out: std.io.AnyWriter,
+    functions: []Function,
+    koneksi_idx: usize,
+    src_globals: []Value,
+    stream: std.net.Stream,
+};
+
+fn soketConnLoop(ctx: SoketConnCtx) void {
+    var vm = VM.init(ctx.allocator, ctx.diags, ctx.out, ctx.functions, ctx.src_globals.len) catch {
+        ctx.stream.close();
+        return;
+    };
+    defer vm.deinit(); // menutup semua conns termasuk stream ini
+    @memcpy(vm.global_slots, ctx.src_globals);
+    vm.conns.append(ctx.stream) catch {
+        ctx.stream.close();
+        return;
+    };
+    const handle: i64 = @intCast(vm.conns.items.len - 1);
+    _ = vm.callTenunFn(ctx.koneksi_idx, &.{.{ .bulat = handle }}) catch {};
+}
 
 fn workerLoop(ctx: WorkerCtx) void {
     var vm = VM.init(ctx.allocator, ctx.diags, ctx.out, ctx.functions, ctx.src_globals.len) catch return;
