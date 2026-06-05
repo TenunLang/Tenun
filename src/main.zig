@@ -1,7 +1,8 @@
 ﻿const std = @import("std");
 const driver = @import("driver.zig");
+const build_options = @import("build_options");
 
-pub const version = "0.0.0";
+pub const version = build_options.version;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
