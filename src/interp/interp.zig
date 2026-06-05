@@ -478,6 +478,9 @@ pub const Interpreter = struct {
                 arr[src.len] = args[1];
                 break :blk .{ .array = arr };
             },
+            49 => .{ .teks = crypto.sha256Raw(a, args[0].teks) catch return self.runtimeError(pos, "gagal sha256Raw") },
+            50 => .{ .teks = crypto.hmacSha256Raw(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal hmac raw") },
+            51 => .{ .teks = crypto.pbkdf2Sha256(a, args[0].teks, args[1].teks, args[2].bulat) catch return self.runtimeError(pos, "gagal pbkdf2") },
             else => unreachable,
         };
     }

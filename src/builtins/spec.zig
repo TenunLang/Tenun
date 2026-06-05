@@ -60,6 +60,9 @@ pub const list = [_]Spec{
     .{ .name = "keBulat", .params = &.{.teks}, .ret = .bulat },
     .{ .name = "keTeks", .params = &.{.bulat}, .ret = .teks },
     .{ .name = "dorong", .params = &.{ teks_array, .teks }, .ret = teks_array },
+    .{ .name = "sha256Raw", .params = &.{.teks}, .ret = .teks },
+    .{ .name = "hmacSha256Raw", .params = &.{ .teks, .teks }, .ret = .teks },
+    .{ .name = "pbkdf2", .params = &.{ .teks, .teks, .bulat }, .ret = .teks },
 };
 
 pub const layani_id = 9;
