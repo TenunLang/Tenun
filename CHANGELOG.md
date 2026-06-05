@@ -2,6 +2,14 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Package manager: `tenun add` + `impor` (SELESAI)
+
+- **`tenun add <nama>`** — `git clone --depth 1` modul dari `github.com/TenunLang/modul-<nama>` ke `./tenun_modul/<nama>`. `tenun add <url>` untuk repo apa pun. (`driver.add`)
+- **`impor "<nama>";`** — pernyataan impor (diproses di driver sebelum lexing, berbasis baris): memuat `tenun_modul/<nama>/<nama>.tenun` (atau `tenun_modul/<nama>.tenun`) dan menggabungkan fungsi top-level-nya ke program. Fungsi modul langsung bisa dipanggil (hoisted). (`driver.loadProgram`/`loadModule`)
+- Verified: `tenun add https://github.com/octocat/Hello-World` clone OK; modul lokal `impor "sapa"` → `sapa("Tenun")` jalan.
+- Keterbatasan: namespace flat (belum `tetap m = modul("mysql")` + `m.sambung()` — perlu fungsi-sebagai-nilai / akses anggota). `impor` harus satu baris `impor "x";`.
+- Konvensi modul: repo `TenunLang/modul-<nama>`, berkas `<nama>.tenun` di root.
+
 ## 2026-06-05 — Encode/decode integer biner (SELESAI)
 
 Fondasi untuk membangun klien protokol biner (Postgres/MySQL) sebagai modul Tenun.

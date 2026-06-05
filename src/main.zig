@@ -22,6 +22,12 @@ pub fn main() !void {
     const cmd = args[1];
     if (std.mem.eql(u8, cmd, "version")) {
         try stdout.print("tenun {s}\n", .{version});
+    } else if (std.mem.eql(u8, cmd, "add")) {
+        if (args.len < 3) {
+            try stderr.print("error: 'tenun add' membutuhkan nama modul (mis. 'tenun add mysql')\n", .{});
+        } else {
+            try driver.add(allocator, args[2]);
+        }
     } else if (std.mem.eql(u8, cmd, "run")) {
         var path: ?[]const u8 = null;
         var use_vm = true;
@@ -64,6 +70,9 @@ fn printUsage(writer: anytype) !void {
         \\  tenun run <file> --interp   menjalankan via tree-walking interpreter
         \\  tenun build <file>     kompilasi ke executable native (<file>.exe)
         \\  tenun build <file> --emit-c   simpan juga sumber C perantara
+        \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
+        \\
+        \\Dalam kode, pakai modul dengan: impor "<modul>";
         \\
     , .{version});
 }

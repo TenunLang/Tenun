@@ -68,7 +68,30 @@ Aturan:
 | `bool` | nilai logika | `benar`, `salah` |
 | `kosong` | ketiadaan nilai | `kosong` |
 
-### Larik (array) [JALAN]
+## Modul & Paket [JALAN]
+
+Pasang modul dari GitHub dengan `tenun add`:
+
+```
+tenun add mysql          # clone github.com/TenunLang/modul-mysql ke ./tenun_modul/mysql
+tenun add https://github.com/akun/repo   # atau URL repo apa pun
+```
+
+Pakai modul di kode dengan pernyataan `impor` (satu per baris):
+
+```tenun
+impor "mysql";
+
+biar koneksi: bulat = sambungMysql("localhost", 3306);
+```
+
+`impor "nama";` memuat berkas `tenun_modul/nama/nama.tenun` (atau `tenun_modul/nama.tenun`) dan menjadikan fungsi top-level modul tersedia di program. Modul ditulis dalam bahasa Tenun biasa, memanfaatkan builtin inti (TCP, kripto, encode biner, dll).
+
+Konvensi modul: repo `TenunLang/modul-<nama>` dengan berkas `<nama>.tenun` di root berisi `fungsi`-`fungsi` publik.
+
+Catatan: saat ini `impor` menggabungkan fungsi modul ke ruang nama global (panggil langsung namanya). Bentuk bernamespace `tetap m = modul("mysql")` lalu `m.sambung(...)` direncanakan (perlu fungsi sebagai nilai / akses anggota).
+
+## Larik (array) [JALAN]
 
 Larik adalah deretan nilai bertipe sama. Tipe ditulis `[]T` (mis. `[]bulat`). Literal ditulis dengan kurung siku.
 

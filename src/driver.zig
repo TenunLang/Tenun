@@ -8,7 +8,7 @@ const vm = @import("vm/vm.zig");
 const codegen = @import("codegen/codegen.zig");
 
 pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool) !void {
-    const source = try readFile(allocator, path);
+    const source = try loadProgram(allocator, path);
     defer allocator.free(source);
 
     var diags = Diagnostics.init(allocator);
@@ -66,7 +66,7 @@ pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool) !void {
 }
 
 pub fn build(allocator: std.mem.Allocator, path: []const u8, keep_c: bool) !void {
-    const source = try readFile(allocator, path);
+    const source = try loadProgram(allocator, path);
     defer allocator.free(source);
 
     var diags = Diagnostics.init(allocator);
@@ -133,6 +133,87 @@ pub fn build(allocator: std.mem.Allocator, path: []const u8, keep_c: bool) !void
     if (!keep_c) std.fs.cwd().deleteFile(c_path) catch {};
 
     try stdout.print("[tenun] build sukses: {s}\n", .{exe_path});
+}
+
+pub fn add(allocator: std.mem.Allocator, arg: []const u8) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+
+    var url: []const u8 = undefined;
+    var name: []const u8 = undefined;
+    if (std.mem.indexOf(u8, arg, "://") != null) {
+        url = arg;
+        var base = arg;
+        if (std.mem.lastIndexOfScalar(u8, base, '/')) |i| base = base[i + 1 ..];
+        if (std.mem.endsWith(u8, base, ".git")) base = base[0 .. base.len - 4];
+        name = base;
+    } else {
+        url = try std.fmt.allocPrint(allocator, "https://github.com/TenunLang/modul-{s}", .{arg});
+        name = arg;
+    }
+    defer if (std.mem.indexOf(u8, arg, "://") == null) allocator.free(url);
+
+    std.fs.cwd().makePath("tenun_modul") catch {};
+    const dest = try std.fmt.allocPrint(allocator, "tenun_modul/{s}", .{name});
+    defer allocator.free(dest);
+
+    try stdout.print("[tenun] mengambil modul '{s}' dari {s}\n", .{ name, url });
+    var child = std.process.Child.init(&.{ "git", "clone", "--depth", "1", url, dest }, allocator);
+    const term = child.spawnAndWait() catch |err| {
+        try stderr.print("error: gagal menjalankan git: {s}\n", .{@errorName(err)});
+        return;
+    };
+    if (term != .Exited or term.Exited != 0) {
+        try stderr.print("error: gagal mengambil modul '{s}'\n", .{name});
+        return;
+    }
+    try stdout.print("[tenun] modul '{s}' terpasang di {s} — pakai dengan: impor \"{s}\";\n", .{ name, dest, name });
+}
+
+fn loadModule(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
+    const p1 = try std.fmt.allocPrint(allocator, "tenun_modul/{s}/{s}.tenun", .{ name, name });
+    defer allocator.free(p1);
+    if (std.fs.cwd().access(p1, .{})) {
+        return readFile(allocator, p1);
+    } else |_| {}
+    const p2 = try std.fmt.allocPrint(allocator, "tenun_modul/{s}.tenun", .{name});
+    defer allocator.free(p2);
+    return readFile(allocator, p2);
+}
+
+fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const main_src = try readFile(allocator, path);
+    defer allocator.free(main_src);
+
+    var out = std.ArrayList(u8).init(allocator);
+    errdefer out.deinit();
+
+    var lines = std.mem.splitScalar(u8, main_src, '\n');
+    while (lines.next()) |line| {
+        const t = std.mem.trim(u8, line, " \t\r");
+        if (std.mem.startsWith(u8, t, "impor \"")) {
+            const rest = t["impor \"".len..];
+            const end = std.mem.indexOfScalar(u8, rest, '"') orelse {
+                try out.appendSlice(line);
+                try out.append('\n');
+                continue;
+            };
+            const name = rest[0..end];
+            const mod = loadModule(allocator, name) catch {
+                try out.appendSlice("// modul tidak ditemukan: ");
+                try out.appendSlice(name);
+                try out.append('\n');
+                continue;
+            };
+            defer allocator.free(mod);
+            try out.appendSlice(mod);
+            try out.append('\n');
+        } else {
+            try out.appendSlice(line);
+            try out.append('\n');
+        }
+    }
+    return out.toOwnedSlice();
 }
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
