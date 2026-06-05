@@ -29,7 +29,23 @@ untuk i dari 1 sampai 4 {
   - Tree-walking interpreter (untuk diagnosa)
   - Kompilasi native ke executable (tercepat)
 
-## Membangun compiler
+## Instalasi
+
+Linux / macOS:
+
+```
+curl -fsSL https://raw.githubusercontent.com/TenunLang/Tenun/main/install.sh | bash
+```
+
+Windows (PowerShell):
+
+```
+irm https://raw.githubusercontent.com/TenunLang/Tenun/main/install.ps1 | iex
+```
+
+Skrip mengunduh binari rilis terbaru ke `~/.tenun/bin` dan menambahkannya ke PATH. Tersedia juga installer di halaman [Releases](https://github.com/TenunLang/Tenun/releases): `.deb` (Linux), `.msi` (Windows), dan binari mentah Linux/macOS/Windows.
+
+## Membangun compiler (dari sumber)
 
 Membutuhkan Zig 0.14.0.
 

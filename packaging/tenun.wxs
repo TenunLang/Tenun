@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Name="Tenun" Id="*" UpgradeCode="6f3e1c2a-9b4d-4e7a-8c1f-2d5b6a7c8e90"
+           Language="1033" Codepage="1252" Version="@VERSION@" Manufacturer="TenunLang">
+    <Package Id="*" Keywords="Installer" Description="Bahasa pemrograman Tenun"
+             Manufacturer="TenunLang" InstallerVersion="200" Languages="1033"
+             Compressed="yes" SummaryCodepage="1252"/>
+    <Media Id="1" Cabinet="tenun.cab" EmbedCab="yes"/>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLDIR" Name="Tenun">
+          <Component Id="MainExe" Guid="b2c4d6e8-1a3b-5c7d-9e0f-1a2b3c4d5e6f">
+            <File Id="tenunexe" Name="tenun.exe" Source="tenun.exe" KeyPath="yes"/>
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+    <Feature Id="Main" Title="Tenun" Level="1">
+      <ComponentRef Id="MainExe"/>
+    </Feature>
+  </Product>
+</Wix>

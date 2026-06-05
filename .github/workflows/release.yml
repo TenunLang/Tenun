@@ -29,8 +29,33 @@ jobs:
           cp zig-out/bin/tenun dist/tenun-linux-x86_64
           zig build -Dtarget=aarch64-linux-musl -Doptimize=ReleaseFast
           cp zig-out/bin/tenun dist/tenun-linux-aarch64
+          zig build -Dtarget=x86_64-macos -Doptimize=ReleaseFast
+          cp zig-out/bin/tenun dist/tenun-macos-x86_64
+          zig build -Dtarget=aarch64-macos -Doptimize=ReleaseFast
+          cp zig-out/bin/tenun dist/tenun-macos-aarch64
           zig build -Dtarget=x86_64-windows-gnu -Doptimize=ReleaseFast
           cp zig-out/bin/tenun.exe dist/tenun-windows-x86_64.exe
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y wixl
+
+      - name: Build installers (DEB + MSI)
+        run: |
+          VER=0.0.${{ github.run_number }}
+          # DEB amd64
+          mkdir -p deb/DEBIAN deb/usr/bin
+          cp dist/tenun-linux-x86_64 deb/usr/bin/tenun
+          chmod 755 deb/usr/bin/tenun
+          printf 'Package: tenun\nVersion: %s\nArchitecture: amd64\nMaintainer: TenunLang\nDescription: Bahasa pemrograman Tenun\n' "$VER" > deb/DEBIAN/control
+          dpkg-deb --build deb "dist/tenun_${VER}_amd64.deb"
+          # DEB arm64
+          cp dist/tenun-linux-aarch64 deb/usr/bin/tenun
+          printf 'Package: tenun\nVersion: %s\nArchitecture: arm64\nMaintainer: TenunLang\nDescription: Bahasa pemrograman Tenun\n' "$VER" > deb/DEBIAN/control
+          dpkg-deb --build deb "dist/tenun_${VER}_arm64.deb"
+          # MSI (Windows)
+          cp dist/tenun-windows-x86_64.exe tenun.exe
+          sed "s/@VERSION@/$VER/" packaging/tenun.wxs > tenun.gen.wxs
+          wixl -o "dist/tenun-${VER}-x86_64.msi" tenun.gen.wxs
 
       - name: Release
         uses: softprops/action-gh-release@v2
