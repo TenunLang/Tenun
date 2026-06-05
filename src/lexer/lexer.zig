@@ -72,7 +72,12 @@ pub const Lexer = struct {
 
     fn string(self: *Lexer) !Token {
         while (!self.isAtEnd() and self.peek() != '"') {
-            _ = self.advance();
+            if (self.peek() == '\\') {
+                _ = self.advance();
+                if (!self.isAtEnd()) _ = self.advance();
+            } else {
+                _ = self.advance();
+            }
         }
         if (self.isAtEnd()) {
             try self.diags.report(.err, self.start_line, self.start_col, "string belum ditutup");

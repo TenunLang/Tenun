@@ -1,0 +1,19 @@
+fungsi tangani(metode: teks, jalur: teks, badan: teks): teks {
+    kalau jalur == "/" {
+        headerKan("Content-Type", "text/html; charset=utf-8");
+        kembali "<h1>Halo dari Tenun</h1><p>Web server berjalan.</p>";
+    }
+    kalau jalur == "/api" {
+        headerKan("Content-Type", "application/json");
+        kembali "{\"pesan\":\"halo\",\"metode\":\"" + metode + "\"}";
+    }
+    kalau metode == "POST" {
+        kembali "Kamu kirim: " + badan;
+    }
+    statusKan(404);
+    headerKan("Content-Type", "text/plain");
+    kembali "404 - tidak ditemukan: " + jalur;
+}
+
+cetak("server siap");
+layani(8080);

@@ -1,0 +1,2 @@
+biar isi: teks = ambil("https://example.com");
+cetak(isi);

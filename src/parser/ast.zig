@@ -256,7 +256,11 @@ fn dumpStmt(stmt: *Stmt, writer: anytype) anyerror!void {
 fn dumpExpr(expr: *Expr, writer: anytype) anyerror!void {
     switch (expr.data) {
         .number => |s| try writer.writeAll(s),
-        .string => |s| try writer.writeAll(s),
+        .string => |s| {
+            try writer.writeByte('"');
+            try writer.writeAll(s);
+            try writer.writeByte('"');
+        },
         .boolean => |b| try writer.writeAll(if (b) "benar" else "salah"),
         .nil => try writer.writeAll("kosong"),
         .ident => |s| try writer.writeAll(s),

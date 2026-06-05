@@ -6,6 +6,110 @@ Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
 Nama bahasa diperbaiki jadi **Tenun** (bukan Tenu). Rename menyeluruh kata utuh `Tenu`/`tenu` → `Tenun`/`tenun` di semua kode/docs/skill/memory. Binary `tenun`, package `.tenun`, ekstensi file `.tenun`, skill dir `tenun-spec`, memory `tenun-*`. Fingerprint build.zig.zon berubah → `0x7c8391e5737e79ae` (name baru). Teks user-facing pakai Bahasa Indonesia formal.
 
+## 2026-06-05 — Built-in kripto (SELESAI)
+
+Buat hashing password, token, dan membangun auth klien DB.
+
+- `src/builtins/crypto.zig` — `sha256`/`sha1`/`md5` (hex via std.crypto.hash), `hmacSha256` (std.crypto.auth.hmac), `base64Enkode`/`base64Dekode` (std.base64.standard), `acak(n)` (std.crypto.random → hex). Helper `toHex`.
+- Builtin id 34 `sha256`, 35 `sha1`, 36 `md5`, 37 `hmacSha256`, 38 `base64`, 39 `dariBase64`, 40 `acak`. Dispatch interp+VM.
+- Verified: hash sha256/sha1/md5, hmac, base64 roundtrip ("Halo Tenun"↔"SGFsbyBUZW51bg=="), acak(16)→32 hex.
+- Output hash heksadesimal (printable). Untuk SCRAM/biner mentah bisa dipadukan dengan base64. Docs `BAHASA.md` diperbarui.
+
+## 2026-06-05 — Konektor TCP mentah (fondasi klien DB) (SELESAI)
+
+Primitif jaringan low-level supaya klien DB/protokol dibangun sebagai modul Tenun nanti.
+
+- VM+interp simpan daftar koneksi (`conns: ArrayList(?std.net.Stream)`, ditutup saat deinit).
+- Builtin id 30 `sambung(host, port): bulat` (handel, via `std.net.tcpConnectToHost` — DNS + connect), 31 `kirim(soket, data)`, 32 `terima(soket, maks): teks` (baca byte mentah, boleh biner), 33 `tutup(soket)`.
+- Verified: `sambung("example.com",80)` + HTTP GET manual → `terima` mengembalikan "HTTP/1.1 200 OK".
+- Catatan: koneksi per-VM (per-worker). DB sungguhan (Postgres/Redis/MySQL) akan dibangun di atas primitif ini sebagai modul Tenun. Docs `BAHASA.md` diperbarui.
+
+## 2026-06-05 — Penyimpanan persisten key-value (SELESAI)
+
+Storage untuk web app (sesi/data) tanpa dependency eksternal.
+
+- `src/builtins/kv.zig` — KV store di berkas `tenun_data.json`. Operasi `simpan`/`muat`/`hapus` pakai `std.json` (parse leaky + stringify), dilindungi `std.Thread.Mutex` global (aman multi-worker). Tiap operasi baca-modifikasi-tulis berkas.
+- Builtin id 27 `simpan(kunci, nilai)`, 28 `muat(kunci): teks`, 29 `hapus(kunci)`. Dispatch interp+VM.
+- Verified: simpan/muat 2 key, hapus → muat balik "", file akhir `{"kota":"Jakarta"}`.
+- `.gitignore`: `tenun_data.json`. Keterbatasan: KV sederhana (nilai teks, baca-tulis seluruh file per operasi) — untuk skala besar perlu DB sungguhan. Docs `BAHASA.md` diperbarui.
+
+## 2026-06-05 — Baca header & cookie permintaan (SELESAI)
+
+Auth & session jadi mungkin.
+
+- VM+interp simpan header permintaan masuk (`req_headers`, di-capture dari `req.iterateHeaders()` tiap permintaan, dupe ke arena, reset per-request).
+- Builtin id 25 `headerMasuk(nama): teks` (cari case-insensitive via `std.ascii.eqlIgnoreCase`), id 26 `cookie(nama): teks` (baca header Cookie lalu parse `k=v; k=v` via `text.cookieAmbil`).
+- Set cookie/header respons tetap lewat `headerKan` (mis. `Set-Cookie`).
+- Verified curl: `-H "Authorization: Bearer xyz"` → `headerMasuk`; `-H "Cookie: sesi=abc123"` → `cookie("sesi")="abc123"`; `headerKan("Set-Cookie",...)` muncul di respons.
+
+## 2026-06-05 — Parsing query string + form (SELESAI)
+
+- `src/builtins/text.zig`: `kueri(url, kunci)` (ambil `?k=v` setelah `?`), `form(badan, kunci)` (urlencoded body). Keduanya URL-decode nilai (`%XX` → byte, `+` → spasi) via helper `urlDecode`/`paramDari`.
+- Builtin id 23 `kueri`, 24 `form`. Dispatch interp+VM.
+- Verified: `kueri("/cari?q=halo+dunia","q")="halo dunia"`, `%20` decode, `form` body, key tak ada → "".
+
+## 2026-06-05 — JSON (baca) + adaFile + web app penuh (SELESAI)
+
+API + static serving lengkap dengan 404.
+
+- `src/builtins/json.zig` — `teks`/`angka`/`boolean`(a, src, key) baca field top-level JSON via `std.json.parseFromSliceLeaky` (alokasi di arena, tanpa deinit). Builtin: `jsonTeks`,`jsonAngka`,`jsonBool` (json:teks, kunci:teks).
+- `src/builtins/fs.zig` tambah `ada(path) bool` (access). Builtin `adaFile` → untuk 404.
+- Dispatch interp+VM cases 19-22. Spec id 19-22.
+- **Web app penuh** `examples/webapp.tenun`: static (HTML/CSS, content-type via `tipeKonten`), 404 via `adaFile`+`statusKan`, REST `POST /api` baca JSON body (`jsonTeks`) balikin JSON. Verified curl: GET / (200 html), /gaya.css (200 css), /ngawur (404), POST /api {"nama":"Tenun"} → {"halo":"Tenun"}.
+- Keterbatasan JSON: hanya field top-level skalar; objek/larik bersarang & serialize otomatis belum (butuh tipe dinamis). Docs `BAHASA.md` diperbarui.
+
+## 2026-06-05 — String ops + MIME + web app statis (SELESAI)
+
+Builtin untuk bikin web app nyata: routing, parsing, file statis.
+
+- `src/builtins/text.zig` tambah: `cari` (indexOf, -1), `ganti` (replace all via std.mem.replaceOwned), `pisah` (split → [][]const u8), `mulaiDengan`/`akhiriDengan` (prefix/suffix), `tipeKonten` (MIME by ekstensi).
+- Spec: `cari`,`ganti`,`pisah`(ret `[]teks`),`gabung`(param `[]teks` → teks),`mulaiDengan`,`akhiriDengan`,`tipeKonten`. Tipe larik di spec via `const teks_el: Type = .teks; teks_array = .{ .array = &teks_el }`.
+- Dispatch interp+VM: `pisah` bangun array Value, `gabung` baca array Value + join. Sisanya pure.
+- Verified: `cari("halo dunia","dunia")=5`, `ganti`, `pisah`/`gabung`, `mulaiDengan`, `tipeKonten("gaya.css")=text/css`.
+- **Web app statis** berjalan: `examples/webapp.tenun` + `examples/publik/{index.html,gaya.css}` — serve HTML+CSS dengan content-type benar (curl 200). Docs `BAHASA.md` diperbarui (tabel builtin + contoh file statis).
+
+## 2026-06-05 — Server multi-threaded (production) (SELESAI)
+
+Server jadi konkuren — siap menangani banyak permintaan paralel.
+
+- **Thread pool**: `layani` menjalankan 1 worker per inti CPU (`std.Thread.getCpuCount`). Semua worker `accept()` dari listener yang sama.
+- **Isolasi worker**: tiap worker punya VM sendiri (stack/frame/arena terpisah), berbagi tabel fungsi (bytecode immutable, aman dibaca bersama), dan meng-clone variabel global saat startup (tanpa lock, tanpa data race). Arena nilai di-reset tiap permintaan (memori terbatas).
+- `serve` di-refactor: `WorkerCtx` + `workerLoop` (free fn untuk thread) + `handleConn` (per-permintaan). Interpreter (`--interp`) tetap single-thread (untuk diagnosa).
+- Terverifikasi: 16 worker, 50 permintaan paralel, semua 200.
+- Catatan/keterbatasan: modifikasi variabel global di handler tidak terbagi antar worker (clone per-worker) — state persisten harus lewat file/DB. Docs `BAHASA.md` diperbarui (catatan konkurensi).
+
+## 2026-06-05 — Server web diperkaya + escape string (SELESAI)
+
+Fokus: web programming (lihat arah project). Server jadi layak untuk web app.
+
+- **Handler diperkaya**: `tangani(metode: teks, jalur: teks, badan: teks): teks` — sekarang menerima method HTTP, path, dan request body (sebelumnya hanya path). Server membaca `req.head.method`, `req.head.target`, dan body via `req.reader()`.
+- **Builtin respons**: `statusKan(kode: bulat)` set status code; `headerKan(nama, nilai)` tambah header. Disimpan di state VM/interp (`resp_status`, `resp_headers`), direset tiap permintaan, diterapkan di `req.respond` (`.status`, `.extra_headers`).
+- **Escape string** di lexer/parser: `\"` `\\` `\n` `\t` `\r`. Lexer tidak terminate pada `\"`; parser mendekode escape ke nilai string (di arena). Penting untuk JSON. interp/vm pakai nilai terdekode; codegen native me-escape ulang ke literal C; dumper AST membungkus dengan kutip.
+- Terverifikasi via curl: GET / (200 text/html), GET /api (200 application/json dengan JSON ber-escape), POST (method+body), 404 (statusKan).
+- `examples/server.tenun` diperbarui jadi router (GET/POST/JSON/404). Docs `BAHASA.md` + `GRAMMAR.md` diperbarui.
+
+## 2026-06-05 — Stdlib registry + math/teks/file + HTTP server `layani` (SELESAI)
+
+Fondasi stdlib + batch builtin, semua via `tenun run` (VM/interp), tanpa build.
+
+- **Registry builtin**: `src/builtins/spec.zig` (tabel `{name, params, ret}`) jadi satu sumber buat sema (cek tipe/arity) + compiler (id) + dispatch. Logika builtin di modul Value-agnostic: `builtins/math` (inline), `builtins/text.zig` (`potong`), `builtins/fs.zig` (baca/tulis), `builtins/http.zig`.
+- **VM**: opcode generik `builtin id argc` (ganti `http_get`); `callBuiltin(id, args)`. Dispatch sama di interp (`callBuiltin`). Sema loop `spec.list` (hapus special-case `ambil`). Codegen native: builtin runtime → unsupported.
+- **Builtin baru**: `akar`, `pangkat`, `mutlak`, `bulatkan` (math), `panjangTeks`, `potong` (teks), `bacaFile`, `tulisFile` (file).
+- **HTTP server `layani(port)`** — mirip Node.js: `tenun run server.tenun` langsung jadi web server, tanpa kompilasi. Memakai `std.http.Server`. Tiap permintaan memanggil fungsi user `tangani(jalur: teks): teks` dan mengirim hasilnya sebagai body. Mekanisme: VM di-refactor `run`→`execLoop(stop)` + `callTenunFn` (panggil fungsi Tenun re-entran dari dalam builtin); interp pakai `invokeUser`. Terverifikasi dengan curl (respons dinamis per path).
+- `examples/server.tenun`, `examples/web.tenun`. Docs `BAHASA.md` diperbarui (tabel builtin + bagian server).
+
+## 2026-06-05 — Stdlib jaringan: builtin `ambil` (HTTP/HTTPS GET) (SELESAI)
+
+Builtin pertama untuk jaringan. `ambil(url: teks): teks` melakukan HTTP GET dan mengembalikan body. HTTPS/TLS ditangani otomatis oleh `std.http.Client` (sertifikat sistem) — tidak perlu konfigurasi.
+
+- `src/builtins/http.zig` — `get(allocator, url) -> []u8` via `std.http.Client.fetch` (response_storage dynamic).
+- Sema: `ambil` 1 arg `teks` → `teks`.
+- Interpreter + VM: jalankan `ambil` (VM pakai opcode baru `http_get`). Body dialokasikan di arena nilai.
+- Codegen native: `ambil` dilaporkan belum didukung (butuh runtime) — pakai `tenun run`.
+- Terverifikasi: `tenun run examples/web.tenun` mengambil `https://example.com` (TLS) dan mencetak HTML-nya.
+- `examples/web.tenun` ditambah. Docs `BAHASA.md` diperbarui (builtin + bagian jaringan).
+- Catatan: parsing JSON, soket mentah, dan method lain (POST/header) menyusul.
+
 ## 2026-06-05 — Codegen native: larik + UX build (SELESAI)
 
 - **Larik di codegen native.** Representasi C universal `typedef struct { void* data; int64_t len; } TenunArr`. Literal `[..]` via statement-expression (`({ T* _arr = malloc(...); _arr[i]=..; (TenunArr){...}; })`, didukung clang/zig cc). Indeks baca/tulis: `((T*)(arr).data)[i]`. `panjang(a)` → `(a).len`. `cetak` larik skalar → loop printf `[a, b, c]`. **Larik bersarang jalan** (mis. `m[1][0]`) karena elemen `[][]bulat` bertipe `TenunArr` rekursif. Cetak larik bersarang belum (pakai VM).

@@ -12,3 +12,6 @@ examples/*.c
 .remember/
 CLAUDE.md
 docs/CLAUDE_CODE_PROMPT.md
+
+# Data runtime
+tenun_data.json

@@ -1,6 +1,7 @@
 const std = @import("std");
 const ast = @import("../parser/ast.zig");
 const Diagnostics = @import("../diagnostics/diagnostics.zig").Diagnostics;
+const spec = @import("../builtins/spec.zig");
 const Type = ast.Type;
 
 const VarInfo = struct {
@@ -303,6 +304,19 @@ const Sema = struct {
                 if (at) |t| if (std.meta.activeTag(t) != .array) try self.report(expr.pos, "'panjang' butuh argumen larik");
             }
             return .bulat;
+        }
+
+        if (spec.indexOf(name)) |id| {
+            const bs = spec.list[id];
+            if (c.args.len != bs.params.len) {
+                try self.report(expr.pos, "jumlah argumen builtin tidak sesuai");
+            } else {
+                for (c.args, bs.params) |arg, ptype| {
+                    const at = try self.checkExpr(arg);
+                    if (at) |t| if (!t.eql(ptype)) try self.report(arg.pos, "tipe argumen builtin tidak cocok");
+                }
+            }
+            return bs.ret;
         }
 
         const sig = self.functions.get(name) orelse {

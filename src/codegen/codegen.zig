@@ -1,6 +1,7 @@
 const std = @import("std");
 const ast = @import("../parser/ast.zig");
 const Diagnostics = @import("../diagnostics/diagnostics.zig").Diagnostics;
+const spec = @import("../builtins/spec.zig");
 const Type = ast.Type;
 
 pub const Error = error{Unsupported} || std.mem.Allocator.Error;
@@ -257,7 +258,18 @@ const Codegen = struct {
     fn expr(self: *Codegen, e: *ast.Expr) Error!void {
         switch (e.data) {
             .number => |s| try self.w(s),
-            .string => |s| try self.w(s),
+            .string => |s| {
+                try self.w("\"");
+                for (s) |ch| switch (ch) {
+                    '"' => try self.w("\\\""),
+                    '\\' => try self.w("\\\\"),
+                    '\n' => try self.w("\\n"),
+                    '\t' => try self.w("\\t"),
+                    '\r' => try self.w("\\r"),
+                    else => try self.out.append(ch),
+                };
+                try self.w("\"");
+            },
             .boolean => |b| try self.w(if (b) "1" else "0"),
             .nil => try self.w("0"),
             .ident => |name| {
@@ -302,6 +314,9 @@ const Codegen = struct {
                 }
                 if (std.mem.eql(u8, name, "cetak")) {
                     return self.unsupported(e.pos, "'cetak' hanya didukung sebagai pernyataan di codegen native");
+                }
+                if (spec.indexOf(name) != null) {
+                    return self.unsupported(e.pos, "builtin stdlib (HTTP/file/teks/math) butuh runtime — pakai 'tenun run' (VM), belum didukung di build native");
                 }
                 try self.w("tf_");
                 try self.w(name);
@@ -394,6 +409,7 @@ const Codegen = struct {
             .call => |c| blk: {
                 const name = c.callee.data.ident;
                 if (std.mem.eql(u8, name, "panjang")) break :blk .bulat;
+                if (spec.indexOf(name)) |id| break :blk spec.list[id].ret;
                 if (self.functions.get(name)) |sig| break :blk sig.ret;
                 break :blk .kosong;
             },

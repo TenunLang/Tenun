@@ -37,6 +37,7 @@ selama angka > 0 {
 - Blok kode dibungkus kurung kurawal `{ }`. Blok tidak diakhiri titik koma.
 - Komentar satu baris diawali `//` sampai akhir baris.
 - File sumber berekstensi `.tenun`.
+- Teks mendukung escape: `\"` (kutip), `\\` (backslash), `\n` (baris baru), `\t` (tab), `\r`.
 
 ## 3. Variabel & Konstanta [JALAN]
 
@@ -150,8 +151,164 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 
 | Nama | Arti | Status |
 |---|---|---|
-| `cetak` | menampilkan nilai ke output (diakhiri baris baru) | `[JALAN]` |
-| `panjang` | jumlah elemen sebuah larik (mengembalikan `bulat`) | `[JALAN]` |
+| `cetak(x)` | menampilkan nilai ke output (diakhiri baris baru) | `[JALAN]` |
+| `panjang(larik): bulat` | jumlah elemen larik | `[JALAN]` |
+| `panjangTeks(teks): bulat` | panjang teks (jumlah byte) | `[JALAN]` |
+| `potong(teks, mulai: bulat, jumlah: bulat): teks` | substring | `[JALAN]` |
+| `akar(desimal): desimal` | akar kuadrat | `[JALAN]` |
+| `pangkat(desimal, desimal): desimal` | perpangkatan | `[JALAN]` |
+| `mutlak(desimal): desimal` | nilai mutlak | `[JALAN]` |
+| `bulatkan(desimal): bulat` | pembulatan ke `bulat` | `[JALAN]` |
+| `bacaFile(path: teks): teks` | baca isi file | `[JALAN]` |
+| `tulisFile(path: teks, isi: teks): kosong` | tulis isi ke file | `[JALAN]` |
+| `ambil(url: teks): teks` | HTTP/HTTPS GET (TLS otomatis) | `[JALAN]` |
+| `layani(port: bulat): kosong` | jalankan HTTP server | `[JALAN]` |
+| `statusKan(kode: bulat): kosong` | set kode status respons (dalam `tangani`) | `[JALAN]` |
+| `headerKan(nama: teks, nilai: teks): kosong` | tambah header respons (dalam `tangani`) | `[JALAN]` |
+| `cari(teks, sub: teks): bulat` | indeks kemunculan pertama `sub`, atau -1 | `[JALAN]` |
+| `ganti(teks, dari: teks, ke: teks): teks` | ganti semua kemunculan | `[JALAN]` |
+| `pisah(teks, pemisah: teks): []teks` | pecah teks jadi larik | `[JALAN]` |
+| `gabung(bagian: []teks, pemisah: teks): teks` | gabung larik teks | `[JALAN]` |
+| `mulaiDengan(teks, awalan: teks): bool` | cek prefix | `[JALAN]` |
+| `akhiriDengan(teks, akhiran: teks): bool` | cek suffix | `[JALAN]` |
+| `tipeKonten(namaBerkas: teks): teks` | MIME type dari ekstensi | `[JALAN]` |
+| `adaFile(path: teks): bool` | cek file ada | `[JALAN]` |
+| `kueri(url: teks, kunci: teks): teks` | ambil parameter query (`?k=v`), URL-decoded | `[JALAN]` |
+| `form(badan: teks, kunci: teks): teks` | ambil field form urlencoded, URL-decoded | `[JALAN]` |
+| `headerMasuk(nama: teks): teks` | baca header permintaan (dalam `tangani`) | `[JALAN]` |
+| `cookie(nama: teks): teks` | baca cookie permintaan (dalam `tangani`) | `[JALAN]` |
+| `simpan(kunci: teks, nilai: teks): kosong` | simpan data persisten (key-value) | `[JALAN]` |
+| `muat(kunci: teks): teks` | baca data persisten | `[JALAN]` |
+| `hapus(kunci: teks): kosong` | hapus data persisten | `[JALAN]` |
+| `sambung(host: teks, port: bulat): bulat` | buka koneksi TCP, kembalikan handel | `[JALAN]` |
+| `kirim(soket: bulat, data: teks): kosong` | kirim byte ke koneksi | `[JALAN]` |
+| `terima(soket: bulat, maks: bulat): teks` | baca sampai `maks` byte dari koneksi | `[JALAN]` |
+| `tutup(soket: bulat): kosong` | tutup koneksi | `[JALAN]` |
+| `sha256(data: teks): teks` | hash SHA-256 (hex) | `[JALAN]` |
+| `sha1(data: teks): teks` | hash SHA-1 (hex) | `[JALAN]` |
+| `md5(data: teks): teks` | hash MD5 (hex) | `[JALAN]` |
+| `hmacSha256(kunci: teks, data: teks): teks` | HMAC-SHA-256 (hex) | `[JALAN]` |
+| `base64(data: teks): teks` | encode base64 | `[JALAN]` |
+| `dariBase64(teks): teks` | decode base64 | `[JALAN]` |
+| `acak(jumlah: bulat): teks` | byte acak aman (hex, 2×jumlah char) | `[JALAN]` |
+| `jsonTeks(json: teks, kunci: teks): teks` | ambil field teks dari JSON (top-level) | `[JALAN]` |
+| `jsonAngka(json: teks, kunci: teks): bulat` | ambil field angka dari JSON | `[JALAN]` |
+| `jsonBool(json: teks, kunci: teks): bool` | ambil field bool dari JSON | `[JALAN]` |
+
+Penyimpanan persisten `simpan`/`muat`/`hapus` adalah key-value sederhana yang ditulis ke berkas `tenun_data.json` (aman antar-thread). Cocok untuk sesi/konfigurasi/data ringan; untuk skala besar, DB sungguhan akan menyusul.
+
+Konektor jaringan `sambung`/`kirim`/`terima`/`tutup` adalah primitif TCP mentah — fondasi untuk membangun klien protokol apa pun (Postgres, Redis, MySQL, SMTP) sebagai modul Tenun. `sambung` melakukan resolusi DNS dan koneksi, mengembalikan handel; `terima` membaca byte mentah (boleh biner). Contoh HTTP GET manual:
+
+```tenun
+biar s: bulat = sambung("example.com", 80);
+kirim(s, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+cetak(terima(s, 4096));
+tutup(s);
+```
+
+### Kripto
+
+`sha256`/`sha1`/`md5` mengembalikan hash heksadesimal; `hmacSha256` untuk tanda tangan/SCRAM; `base64`/`dariBase64` untuk encoding; `acak(n)` menghasilkan `n` byte acak aman (CSPRNG) sebagai hex — cocok untuk token sesi / nonce. Berguna untuk hashing password, token, dan membangun autentikasi klien DB.
+
+```tenun
+biar token: teks = acak(32);                 // 64 char hex
+biar hash: teks = sha256("password123");
+biar tanda: teks = hmacSha256(rahasia, data);
+```
+
+Builtin yang membutuhkan runtime (jaringan, file, server) tersedia lewat `tenun run` (VM atau `--interp`). Pada `tenun build` (native), builtin ini belum didukung — kompilasi matematika/teks/larik murni saja yang bisa native.
+
+### Jaringan: `ambil`
+
+```tenun
+biar isi: teks = ambil("https://example.com");
+cetak(isi);
+```
+
+`ambil` melakukan HTTP GET dan mengembalikan body. URL `https://` ditangani dengan TLS otomatis (sertifikat sistem).
+
+### Server HTTP: `layani`
+
+`tenun run` bisa langsung menjadi web server, mirip Node.js — tanpa kompilasi. Definisikan fungsi `tangani(metode: teks, jalur: teks, badan: teks): teks` (dipanggil tiap permintaan), lalu panggil `layani(port)`. Handler menerima method HTTP, jalur (path), dan body permintaan; mengembalikan teks sebagai body respons. Status dan header diatur dengan `statusKan`/`headerKan`.
+
+```tenun
+fungsi tangani(metode: teks, jalur: teks, badan: teks): teks {
+    kalau jalur == "/" {
+        headerKan("Content-Type", "text/html; charset=utf-8");
+        kembali "<h1>Halo dari Tenun</h1>";
+    }
+    kalau jalur == "/api" {
+        headerKan("Content-Type", "application/json");
+        kembali "{\"pesan\":\"halo\",\"metode\":\"" + metode + "\"}";
+    }
+    kalau metode == "POST" {
+        kembali "Kamu kirim: " + badan;
+    }
+    statusKan(404);
+    kembali "404 - tidak ditemukan: " + jalur;
+}
+
+layani(8080);
+```
+
+```
+$ tenun run server.tenun
+[tenun] server berjalan di http://localhost:8080
+```
+
+`layani` memblokir (melayani permintaan terus-menerus). Status respons default 200; `statusKan`/`headerKan` berlaku untuk permintaan yang sedang ditangani dan direset tiap permintaan baru.
+
+Server bersifat **multi-threaded**: otomatis menjalankan satu worker per inti CPU sehingga permintaan ditangani secara paralel. Tiap worker punya konteks eksekusi sendiri (stack terpisah) dan salinan variabel global saat startup. Catatan: hindari memodifikasi variabel global di dalam `tangani` untuk menyimpan state antar-permintaan — tiap worker memegang salinannya sendiri, jadi perubahan tidak terbagi dan tidak persisten. State bersama yang persisten sebaiknya lewat file/DB (akan ada builtin-nya).
+
+### Contoh: menyajikan file statis
+
+```tenun
+fungsi tangani(metode: teks, jalur: teks, badan: teks): teks {
+    biar berkas: teks = "publik" + jalur;
+    kalau jalur == "/" {
+        berkas = "publik/index.html";
+        headerKan("Content-Type", "text/html; charset=utf-8");
+    } lain {
+        headerKan("Content-Type", tipeKonten(jalur));
+    }
+    kembali bacaFile(berkas);
+}
+layani(8080);
+```
+
+Gabungkan `pisah`/`cari`/`mulaiDengan` untuk routing dan mem-parsing query/form, `bacaFile` + `tipeKonten` + `adaFile` untuk file statis (dengan 404).
+
+### Contoh: REST API JSON
+
+```tenun
+fungsi tangani(metode: teks, jalur: teks, badan: teks): teks {
+    kalau jalur == "/api" {
+        headerKan("Content-Type", "application/json");
+        biar nama: teks = jsonTeks(badan, "nama");
+        kembali "{\"halo\":\"" + nama + "\"}";
+    }
+    statusKan(404);
+    kembali "tidak ditemukan";
+}
+layani(8080);
+```
+
+`jsonTeks`/`jsonAngka`/`jsonBool` membaca field top-level dari teks JSON (mis. body permintaan). Untuk membangun JSON, susun teks dengan `+` (escape `\"` didukung). Parser JSON penuh (objek/larik bersarang) menyusul.
+
+### Header & cookie permintaan
+
+Di dalam `tangani`, baca header masuk dengan `headerMasuk(nama)` dan cookie dengan `cookie(nama)`. Set cookie/header respons dengan `headerKan`:
+
+```tenun
+fungsi tangani(metode: teks, jalur: teks, badan: teks): teks {
+    biar token: teks = headerMasuk("Authorization");
+    biar sesi: teks = cookie("sesi");
+    kalau sesi == "" {
+        headerKan("Set-Cookie", "sesi=abc123; Path=/; HttpOnly");
+    }
+    kembali "token=" + token;
+}
+```
 
 `cetak` bukan kata kunci, melainkan fungsi builtin biasa, sehingga dapat diperlakukan seperti fungsi lain.
 

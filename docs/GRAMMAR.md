@@ -44,7 +44,8 @@ larik       = "[" (ekspresi ("," ekspresi)*)? "]" ;
 
 ```
 NUMBER  = digit+ ("." digit+)? ;
-STRING  = '"' karakter* '"' ;
+STRING  = '"' (karakter | escape)* '"' ;
+escape  = '\' ('"' | '\' | 'n' | 't' | 'r') ;
 IDENT   = (huruf | "_") (huruf | digit | "_")* ;
 komentar = "//" sampai akhir baris (diabaikan) ;
 ```

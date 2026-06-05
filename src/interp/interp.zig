@@ -1,6 +1,13 @@
 const std = @import("std");
 const ast = @import("../parser/ast.zig");
 const Diagnostics = @import("../diagnostics/diagnostics.zig").Diagnostics;
+const http = @import("../builtins/http.zig");
+const spec = @import("../builtins/spec.zig");
+const text = @import("../builtins/text.zig");
+const fs = @import("../builtins/fs.zig");
+const json = @import("../builtins/json.zig");
+const kv = @import("../builtins/kv.zig");
+const crypto = @import("../builtins/crypto.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -25,6 +32,12 @@ pub const Interpreter = struct {
     vals: std.heap.ArenaAllocator,
     returning: bool = false,
     ret_value: Value = .kosong,
+    resp_status: u16 = 200,
+    resp_headers: [32]std.http.Header = undefined,
+    resp_header_count: usize = 0,
+    req_headers: [64]std.http.Header = undefined,
+    req_header_count: usize = 0,
+    conns: std.ArrayList(?std.net.Stream),
 
     pub fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter) Interpreter {
         return .{
@@ -35,6 +48,7 @@ pub const Interpreter = struct {
             .global = Scope.init(allocator),
             .locals = std.ArrayList(Scope).init(allocator),
             .vals = std.heap.ArenaAllocator.init(allocator),
+            .conns = std.ArrayList(?std.net.Stream).init(allocator),
         };
     }
 
@@ -44,6 +58,8 @@ pub const Interpreter = struct {
         for (self.locals.items) |*sc| sc.deinit();
         self.locals.deinit();
         self.vals.deinit();
+        for (self.conns.items) |c| if (c) |s| s.close();
+        self.conns.deinit();
     }
 
     pub fn run(self: *Interpreter, program: ast.Program) Error!void {
@@ -126,7 +142,7 @@ pub const Interpreter = struct {
                 }
                 return .{ .bulat = std.fmt.parseInt(i64, s, 10) catch 0 };
             },
-            .string => |s| return .{ .teks = s[1 .. s.len - 1] },
+            .string => |s| return .{ .teks = s },
             .boolean => |b| return .{ .bool = b },
             .nil => return .kosong,
             .ident => |name| return self.get(name).?,
@@ -240,13 +256,21 @@ pub const Interpreter = struct {
             return .{ .bulat = @intCast(v.array.len) };
         }
 
-        const fn_stmt = self.functions.get(name).?;
-        const f = fn_stmt.data.fungsi_decl;
+        if (spec.indexOf(name)) |id| {
+            var argbuf: [8]Value = undefined;
+            for (c.args, 0..) |a, i| argbuf[i] = try self.eval(a);
+            return self.callBuiltin(id, argbuf[0..c.args.len], c.callee.pos);
+        }
 
+        const fn_stmt = self.functions.get(name).?;
         var arg_values = try self.allocator.alloc(Value, c.args.len);
         defer self.allocator.free(arg_values);
         for (c.args, 0..) |arg, i| arg_values[i] = try self.eval(arg);
+        return self.invokeUser(fn_stmt, arg_values);
+    }
 
+    fn invokeUser(self: *Interpreter, fn_stmt: *ast.Stmt, arg_values: []const Value) Error!Value {
+        const f = fn_stmt.data.fungsi_decl;
         const saved = self.locals;
         self.locals = std.ArrayList(Scope).init(self.allocator);
         defer {
@@ -268,6 +292,166 @@ pub const Interpreter = struct {
         const result = if (self.returning) self.ret_value else Value.kosong;
         self.returning = false;
         return result;
+    }
+
+    fn reqHeader(self: *Interpreter, name: []const u8) []const u8 {
+        for (self.req_headers[0..self.req_header_count]) |h| {
+            if (std.ascii.eqlIgnoreCase(h.name, name)) return h.value;
+        }
+        return "";
+    }
+
+    fn serve(self: *Interpreter, port: u16) Error!Value {
+        const z = ast.Pos{ .line = 0, .column = 0 };
+        const fn_stmt = self.functions.get("tangani") orelse return self.runtimeError(z, "server butuh fungsi 'tangani(metode: teks, jalur: teks, badan: teks): teks'");
+        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.runtimeError(z, "alamat tidak valid");
+        var net_server = addr.listen(.{ .reuse_address = true }) catch return self.runtimeError(z, "gagal mendengarkan di port");
+        std.io.getStdErr().writer().print("[tenun] server berjalan di http://localhost:{d}\n", .{port}) catch {};
+        while (true) {
+            const conn = net_server.accept() catch continue;
+            var buf: [65536]u8 = undefined;
+            var hs = std.http.Server.init(conn, &buf);
+            var req = hs.receiveHead() catch {
+                conn.stream.close();
+                continue;
+            };
+            const a = self.vals.allocator();
+            const metode = a.dupe(u8, @tagName(req.head.method)) catch "GET";
+            const path = a.dupe(u8, req.head.target) catch "/";
+            var badan: []const u8 = "";
+            if (req.reader()) |reader| {
+                badan = reader.readAllAlloc(a, 16 * 1024 * 1024) catch "";
+            } else |_| {}
+
+            self.resp_status = 200;
+            self.resp_header_count = 0;
+            self.req_header_count = 0;
+            var hit = req.iterateHeaders();
+            while (hit.next()) |h| {
+                if (self.req_header_count < self.req_headers.len) {
+                    self.req_headers[self.req_header_count] = .{
+                        .name = a.dupe(u8, h.name) catch h.name,
+                        .value = a.dupe(u8, h.value) catch h.value,
+                    };
+                    self.req_header_count += 1;
+                }
+            }
+            const res = self.invokeUser(fn_stmt, &.{ .{ .teks = metode }, .{ .teks = path }, .{ .teks = badan } }) catch Value.kosong;
+            const body = if (std.meta.activeTag(res) == .teks) res.teks else "";
+            req.respond(body, .{
+                .status = @enumFromInt(self.resp_status),
+                .extra_headers = self.resp_headers[0..self.resp_header_count],
+            }) catch {};
+            conn.stream.close();
+        }
+    }
+
+    fn callBuiltin(self: *Interpreter, id: usize, args: []const Value, pos: ast.Pos) Error!Value {
+        const a = self.vals.allocator();
+        return switch (id) {
+            0 => .{ .teks = http.get(a, args[0].teks) catch return self.runtimeError(pos, "gagal mengambil URL") },
+            1 => .{ .desimal = @sqrt(args[0].desimal) },
+            2 => .{ .desimal = std.math.pow(f64, args[0].desimal, args[1].desimal) },
+            3 => .{ .desimal = @abs(args[0].desimal) },
+            4 => .{ .bulat = @intFromFloat(@round(args[0].desimal)) },
+            5 => .{ .bulat = @intCast(args[0].teks.len) },
+            6 => .{ .teks = text.potong(a, args[0].teks, args[1].bulat, args[2].bulat) catch return self.runtimeError(pos, "gagal memotong teks") },
+            7 => .{ .teks = fs.baca(a, args[0].teks) catch return self.runtimeError(pos, "gagal membaca file") },
+            8 => blk: {
+                fs.tulis(args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal menulis file");
+                break :blk .kosong;
+            },
+            9 => self.serve(@intCast(args[0].bulat)),
+            10 => blk: {
+                self.resp_status = @intCast(args[0].bulat);
+                break :blk .kosong;
+            },
+            11 => blk: {
+                if (self.resp_header_count < self.resp_headers.len) {
+                    self.resp_headers[self.resp_header_count] = .{
+                        .name = a.dupe(u8, args[0].teks) catch args[0].teks,
+                        .value = a.dupe(u8, args[1].teks) catch args[1].teks,
+                    };
+                    self.resp_header_count += 1;
+                }
+                break :blk .kosong;
+            },
+            12 => .{ .bulat = text.cari(args[0].teks, args[1].teks) },
+            13 => .{ .teks = text.ganti(a, args[0].teks, args[1].teks, args[2].teks) catch return self.runtimeError(pos, "gagal ganti teks") },
+            14 => blk: {
+                const parts = text.pisah(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal pisah teks");
+                const arr = a.alloc(Value, parts.len) catch return self.runtimeError(pos, "kehabisan memori");
+                for (parts, 0..) |p, i| arr[i] = .{ .teks = p };
+                break :blk .{ .array = arr };
+            },
+            15 => blk: {
+                const arr = args[0].array;
+                var buf = std.ArrayList(u8).init(a);
+                for (arr, 0..) |el, i| {
+                    if (i > 0) buf.appendSlice(args[1].teks) catch {};
+                    buf.appendSlice(el.teks) catch {};
+                }
+                break :blk .{ .teks = buf.toOwnedSlice() catch return self.runtimeError(pos, "kehabisan memori") };
+            },
+            16 => .{ .bool = text.mulaiDengan(args[0].teks, args[1].teks) },
+            17 => .{ .bool = text.akhiriDengan(args[0].teks, args[1].teks) },
+            18 => .{ .teks = text.tipeKonten(args[0].teks) },
+            19 => .{ .teks = json.teks(a, args[0].teks, args[1].teks) },
+            20 => .{ .bulat = json.angka(a, args[0].teks, args[1].teks) },
+            21 => .{ .bool = json.boolean(a, args[0].teks, args[1].teks) },
+            22 => .{ .bool = fs.ada(args[0].teks) },
+            23 => .{ .teks = text.kueri(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal urai kueri") },
+            24 => .{ .teks = text.form(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal urai form") },
+            25 => .{ .teks = self.reqHeader(args[0].teks) },
+            26 => .{ .teks = text.cookieAmbil(a, self.reqHeader("cookie"), args[0].teks) catch return self.runtimeError(pos, "gagal baca cookie") },
+            27 => blk: {
+                kv.simpan(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal simpan data");
+                break :blk .kosong;
+            },
+            28 => .{ .teks = kv.muat(a, args[0].teks) },
+            29 => blk: {
+                kv.hapus(a, args[0].teks) catch return self.runtimeError(pos, "gagal hapus data");
+                break :blk .kosong;
+            },
+            30 => blk: {
+                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch return self.runtimeError(pos, "gagal menyambung");
+                self.conns.append(stream) catch return self.runtimeError(pos, "kehabisan memori");
+                break :blk .{ .bulat = @intCast(self.conns.items.len - 1) };
+            },
+            31 => blk: {
+                const sid: usize = @intCast(args[0].bulat);
+                if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
+                    s.writeAll(args[1].teks) catch return self.runtimeError(pos, "gagal mengirim");
+                };
+                break :blk .kosong;
+            },
+            32 => blk: {
+                const sid: usize = @intCast(args[0].bulat);
+                const maks: usize = @intCast(args[1].bulat);
+                const buf = a.alloc(u8, maks) catch return self.runtimeError(pos, "kehabisan memori");
+                var n: usize = 0;
+                if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
+                    n = s.read(buf) catch 0;
+                };
+                break :blk .{ .teks = buf[0..n] };
+            },
+            33 => blk: {
+                const sid: usize = @intCast(args[0].bulat);
+                if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
+                    s.close();
+                    self.conns.items[sid] = null;
+                };
+                break :blk .kosong;
+            },
+            34 => .{ .teks = crypto.sha256(a, args[0].teks) catch return self.runtimeError(pos, "gagal sha256") },
+            35 => .{ .teks = crypto.sha1(a, args[0].teks) catch return self.runtimeError(pos, "gagal sha1") },
+            36 => .{ .teks = crypto.md5(a, args[0].teks) catch return self.runtimeError(pos, "gagal md5") },
+            37 => .{ .teks = crypto.hmacSha256(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal hmac") },
+            38 => .{ .teks = crypto.base64Enkode(a, args[0].teks) catch return self.runtimeError(pos, "gagal base64") },
+            39 => .{ .teks = crypto.base64Dekode(a, args[0].teks) catch return self.runtimeError(pos, "base64 tidak valid") },
+            40 => .{ .teks = crypto.acak(a, @intCast(args[0].bulat)) catch return self.runtimeError(pos, "gagal acak") },
+            else => unreachable,
+        };
     }
 
     fn printValue(self: *Interpreter, v: Value) Error!void {

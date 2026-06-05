@@ -1,6 +1,13 @@
 const std = @import("std");
 const ast = @import("../parser/ast.zig");
 const Diagnostics = @import("../diagnostics/diagnostics.zig").Diagnostics;
+const http = @import("../builtins/http.zig");
+const spec = @import("../builtins/spec.zig");
+const text = @import("../builtins/text.zig");
+const fs = @import("../builtins/fs.zig");
+const json = @import("../builtins/json.zig");
+const kv = @import("../builtins/kv.zig");
+const crypto = @import("../builtins/crypto.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -45,6 +52,7 @@ pub const OpCode = enum(u8) {
     index_get,
     index_set,
     array_len,
+    builtin,
 };
 
 const Chunk = struct {
@@ -265,7 +273,7 @@ const Compiler = struct {
                 try c.emitU16(i);
             },
             .string => |s| {
-                const i = try c.addConst(.{ .teks = s[1 .. s.len - 1] });
+                const i = try c.addConst(.{ .teks = s });
                 try c.emitOp(.constant);
                 try c.emitU16(i);
             },
@@ -331,6 +339,13 @@ const Compiler = struct {
                 if (std.mem.eql(u8, name, "panjang")) {
                     try self.expr(call.args[0]);
                     try c.emitOp(.array_len);
+                    return;
+                }
+                if (spec.indexOf(name)) |id| {
+                    for (call.args) |a| try self.expr(a);
+                    try c.emitOp(.builtin);
+                    try c.emit(@intCast(id));
+                    try c.emit(@intCast(call.args.len));
                     return;
                 }
                 const idx = self.fn_index.get(name).?;
@@ -413,6 +428,12 @@ const VM = struct {
     frames: std.ArrayList(Frame),
     globals: std.StringHashMap(Value),
     vals: std.heap.ArenaAllocator,
+    resp_status: u16 = 200,
+    resp_headers: [32]std.http.Header = undefined,
+    resp_header_count: usize = 0,
+    req_headers: [64]std.http.Header = undefined,
+    req_header_count: usize = 0,
+    conns: std.ArrayList(?std.net.Stream),
 
     fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter, functions: []Function) !VM {
         return .{
@@ -425,6 +446,7 @@ const VM = struct {
             .frames = std.ArrayList(Frame).init(allocator),
             .globals = std.StringHashMap(Value).init(allocator),
             .vals = std.heap.ArenaAllocator.init(allocator),
+            .conns = std.ArrayList(?std.net.Stream).init(allocator),
         };
     }
     fn deinit(self: *VM) void {
@@ -432,6 +454,8 @@ const VM = struct {
         self.frames.deinit();
         self.globals.deinit();
         self.vals.deinit();
+        for (self.conns.items) |c| if (c) |s| s.close();
+        self.conns.deinit();
     }
 
     inline fn push(self: *VM, v: Value) void {
@@ -448,7 +472,19 @@ const VM = struct {
 
     fn run(self: *VM) !void {
         try self.frames.append(.{ .func = &self.functions[0], .ip = 0, .base = 0 });
+        try self.execLoop(0);
+    }
 
+    fn callTenunFn(self: *VM, fidx: usize, args: []const Value) !Value {
+        const stop = self.frames.items.len;
+        for (args) |a| self.push(a);
+        const base = self.top - args.len;
+        try self.frames.append(.{ .func = &self.functions[fidx], .ip = 0, .base = base });
+        try self.execLoop(stop);
+        return self.pop();
+    }
+
+    fn execLoop(self: *VM, stop: usize) !void {
         var frame = &self.frames.items[self.frames.items.len - 1];
         var code = frame.func.chunk.code.items;
 
@@ -557,6 +593,21 @@ const VM = struct {
                     const v = self.pop();
                     self.push(.{ .bulat = @intCast(v.array.len) });
                 },
+                .builtin => {
+                    const id = code[frame.ip];
+                    const argc = code[frame.ip + 1];
+                    frame.ip += 2;
+                    var argbuf: [8]Value = undefined;
+                    var k: usize = argc;
+                    while (k > 0) {
+                        k -= 1;
+                        argbuf[k] = self.pop();
+                    }
+                    const result = try self.callBuiltin(id, argbuf[0..argc]);
+                    self.push(result);
+                    frame = &self.frames.items[self.frames.items.len - 1];
+                    code = frame.func.chunk.code.items;
+                },
                 .call => {
                     const fidx = code[frame.ip];
                     const argc = code[frame.ip + 1];
@@ -569,9 +620,9 @@ const VM = struct {
                 .ret => {
                     const result = self.pop();
                     const done = self.frames.pop().?;
-                    if (self.frames.items.len == 0) return;
                     self.top = done.base;
                     self.push(result);
+                    if (self.frames.items.len == stop) return;
                     frame = &self.frames.items[self.frames.items.len - 1];
                     code = frame.func.chunk.code.items;
                 },
@@ -620,6 +671,186 @@ const VM = struct {
         }
     }
 
+    fn callBuiltin(self: *VM, id: usize, args: []const Value) !Value {
+        const a = self.vals.allocator();
+        return switch (id) {
+            0 => .{ .teks = http.get(a, args[0].teks) catch return self.rt("gagal mengambil URL") },
+            1 => .{ .desimal = @sqrt(args[0].desimal) },
+            2 => .{ .desimal = std.math.pow(f64, args[0].desimal, args[1].desimal) },
+            3 => .{ .desimal = @abs(args[0].desimal) },
+            4 => .{ .bulat = @intFromFloat(@round(args[0].desimal)) },
+            5 => .{ .bulat = @intCast(args[0].teks.len) },
+            6 => .{ .teks = text.potong(a, args[0].teks, args[1].bulat, args[2].bulat) catch return self.rt("gagal memotong teks") },
+            7 => .{ .teks = fs.baca(a, args[0].teks) catch return self.rt("gagal membaca file") },
+            8 => blk: {
+                fs.tulis(args[0].teks, args[1].teks) catch return self.rt("gagal menulis file");
+                break :blk Value.kosong;
+            },
+            9 => self.serve(@intCast(args[0].bulat)),
+            10 => blk: {
+                self.resp_status = @intCast(args[0].bulat);
+                break :blk Value.kosong;
+            },
+            11 => blk: {
+                if (self.resp_header_count < self.resp_headers.len) {
+                    self.resp_headers[self.resp_header_count] = .{
+                        .name = a.dupe(u8, args[0].teks) catch args[0].teks,
+                        .value = a.dupe(u8, args[1].teks) catch args[1].teks,
+                    };
+                    self.resp_header_count += 1;
+                }
+                break :blk Value.kosong;
+            },
+            12 => .{ .bulat = text.cari(args[0].teks, args[1].teks) },
+            13 => .{ .teks = text.ganti(a, args[0].teks, args[1].teks, args[2].teks) catch return self.rt("gagal ganti teks") },
+            14 => blk: {
+                const parts = text.pisah(a, args[0].teks, args[1].teks) catch return self.rt("gagal pisah teks");
+                const arr = a.alloc(Value, parts.len) catch return self.rt("kehabisan memori");
+                for (parts, 0..) |p, i| arr[i] = .{ .teks = p };
+                break :blk Value{ .array = arr };
+            },
+            15 => blk: {
+                const arr = args[0].array;
+                var buf = std.ArrayList(u8).init(a);
+                for (arr, 0..) |el, i| {
+                    if (i > 0) buf.appendSlice(args[1].teks) catch {};
+                    buf.appendSlice(el.teks) catch {};
+                }
+                break :blk Value{ .teks = buf.toOwnedSlice() catch return self.rt("kehabisan memori") };
+            },
+            16 => .{ .bool = text.mulaiDengan(args[0].teks, args[1].teks) },
+            17 => .{ .bool = text.akhiriDengan(args[0].teks, args[1].teks) },
+            18 => .{ .teks = text.tipeKonten(args[0].teks) },
+            19 => .{ .teks = json.teks(a, args[0].teks, args[1].teks) },
+            20 => .{ .bulat = json.angka(a, args[0].teks, args[1].teks) },
+            21 => .{ .bool = json.boolean(a, args[0].teks, args[1].teks) },
+            22 => .{ .bool = fs.ada(args[0].teks) },
+            23 => .{ .teks = text.kueri(a, args[0].teks, args[1].teks) catch return self.rt("gagal urai kueri") },
+            24 => .{ .teks = text.form(a, args[0].teks, args[1].teks) catch return self.rt("gagal urai form") },
+            25 => .{ .teks = self.reqHeader(args[0].teks) },
+            26 => .{ .teks = text.cookieAmbil(a, self.reqHeader("cookie"), args[0].teks) catch return self.rt("gagal baca cookie") },
+            27 => blk: {
+                kv.simpan(a, args[0].teks, args[1].teks) catch return self.rt("gagal simpan data");
+                break :blk Value.kosong;
+            },
+            28 => .{ .teks = kv.muat(a, args[0].teks) },
+            29 => blk: {
+                kv.hapus(a, args[0].teks) catch return self.rt("gagal hapus data");
+                break :blk Value.kosong;
+            },
+            30 => blk: {
+                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch return self.rt("gagal menyambung");
+                self.conns.append(stream) catch return self.rt("kehabisan memori");
+                break :blk Value{ .bulat = @intCast(self.conns.items.len - 1) };
+            },
+            31 => blk: {
+                const sid: usize = @intCast(args[0].bulat);
+                if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
+                    s.writeAll(args[1].teks) catch return self.rt("gagal mengirim");
+                };
+                break :blk Value.kosong;
+            },
+            32 => blk: {
+                const sid: usize = @intCast(args[0].bulat);
+                const maks: usize = @intCast(args[1].bulat);
+                const buf = a.alloc(u8, maks) catch return self.rt("kehabisan memori");
+                var n: usize = 0;
+                if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
+                    n = s.read(buf) catch 0;
+                };
+                break :blk Value{ .teks = buf[0..n] };
+            },
+            33 => blk: {
+                const sid: usize = @intCast(args[0].bulat);
+                if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
+                    s.close();
+                    self.conns.items[sid] = null;
+                };
+                break :blk Value.kosong;
+            },
+            34 => .{ .teks = crypto.sha256(a, args[0].teks) catch return self.rt("gagal sha256") },
+            35 => .{ .teks = crypto.sha1(a, args[0].teks) catch return self.rt("gagal sha1") },
+            36 => .{ .teks = crypto.md5(a, args[0].teks) catch return self.rt("gagal md5") },
+            37 => .{ .teks = crypto.hmacSha256(a, args[0].teks, args[1].teks) catch return self.rt("gagal hmac") },
+            38 => .{ .teks = crypto.base64Enkode(a, args[0].teks) catch return self.rt("gagal base64") },
+            39 => .{ .teks = crypto.base64Dekode(a, args[0].teks) catch return self.rt("base64 tidak valid") },
+            40 => .{ .teks = crypto.acak(a, @intCast(args[0].bulat)) catch return self.rt("gagal acak") },
+            else => unreachable,
+        };
+    }
+
+    fn reqHeader(self: *VM, name: []const u8) []const u8 {
+        for (self.req_headers[0..self.req_header_count]) |h| {
+            if (std.ascii.eqlIgnoreCase(h.name, name)) return h.value;
+        }
+        return "";
+    }
+
+    fn serve(self: *VM, port: u16) !Value {
+        const tangani_idx = blk: {
+            for (self.functions, 0..) |f, i| {
+                if (std.mem.eql(u8, f.name, "tangani")) break :blk i;
+            }
+            return self.rt("server butuh fungsi 'tangani(metode: teks, jalur: teks, badan: teks): teks'");
+        };
+        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
+        var listener = addr.listen(.{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
+
+        const workers = @max(@as(usize, 1), std.Thread.getCpuCount() catch 4);
+        std.io.getStdErr().writer().print("[tenun] server berjalan di http://localhost:{d} ({d} worker)\n", .{ port, workers }) catch {};
+
+        const ctx = WorkerCtx{
+            .allocator = self.allocator,
+            .diags = self.diags,
+            .out = self.out,
+            .functions = self.functions,
+            .tangani_idx = tangani_idx,
+            .src_globals = &self.globals,
+            .listener = &listener,
+        };
+
+        var t: usize = 1;
+        while (t < workers) : (t += 1) {
+            _ = std.Thread.spawn(.{}, workerLoop, .{ctx}) catch {};
+        }
+        workerLoop(ctx);
+        return .kosong;
+    }
+
+    fn handleConn(self: *VM, conn: std.net.Server.Connection, tangani_idx: usize) void {
+        defer conn.stream.close();
+        var buf: [65536]u8 = undefined;
+        var hs = std.http.Server.init(conn, &buf);
+        var req = hs.receiveHead() catch return;
+        const a = self.vals.allocator();
+        const metode = a.dupe(u8, @tagName(req.head.method)) catch "GET";
+        const path = a.dupe(u8, req.head.target) catch "/";
+        var badan: []const u8 = "";
+        if (req.reader()) |reader| {
+            badan = reader.readAllAlloc(a, 16 * 1024 * 1024) catch "";
+        } else |_| {}
+
+        self.resp_status = 200;
+        self.resp_header_count = 0;
+        self.req_header_count = 0;
+        var hit = req.iterateHeaders();
+        while (hit.next()) |h| {
+            if (self.req_header_count < self.req_headers.len) {
+                self.req_headers[self.req_header_count] = .{
+                    .name = a.dupe(u8, h.name) catch h.name,
+                    .value = a.dupe(u8, h.value) catch h.value,
+                };
+                self.req_header_count += 1;
+            }
+        }
+        const res = self.callTenunFn(tangani_idx, &.{ .{ .teks = metode }, .{ .teks = path }, .{ .teks = badan } }) catch Value.kosong;
+        const body = if (std.meta.activeTag(res) == .teks) res.teks else "";
+        req.respond(body, .{
+            .status = @enumFromInt(self.resp_status),
+            .extra_headers = self.resp_headers[0..self.resp_header_count],
+        }) catch {};
+    }
+
     fn printValue(self: *VM, v: Value) !void {
         switch (v) {
             .bulat => |n| try self.out.print("{d}", .{n}),
@@ -643,6 +874,28 @@ const VM = struct {
         return error.RuntimeError;
     }
 };
+
+const WorkerCtx = struct {
+    allocator: std.mem.Allocator,
+    diags: *Diagnostics,
+    out: std.io.AnyWriter,
+    functions: []Function,
+    tangani_idx: usize,
+    src_globals: *std.StringHashMap(Value),
+    listener: *std.net.Server,
+};
+
+fn workerLoop(ctx: WorkerCtx) void {
+    var vm = VM.init(ctx.allocator, ctx.diags, ctx.out, ctx.functions) catch return;
+    defer vm.deinit();
+    var it = ctx.src_globals.iterator();
+    while (it.next()) |e| vm.globals.put(e.key_ptr.*, e.value_ptr.*) catch {};
+    while (true) {
+        const conn = ctx.listener.accept() catch continue;
+        vm.handleConn(conn, ctx.tangani_idx);
+        _ = vm.vals.reset(.retain_capacity);
+    }
+}
 
 fn readU16(code: []const u8, ip: *usize) u16 {
     const hi: u16 = code[ip.*];

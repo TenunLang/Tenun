@@ -303,7 +303,7 @@ const Parser = struct {
             },
             .string => {
                 _ = self.advance();
-                return self.newExpr(posOf(t), .{ .string = t.lexeme });
+                return self.newExpr(posOf(t), .{ .string = try self.decodeString(t.lexeme) });
             },
             .kw_benar => {
                 _ = self.advance();
@@ -344,6 +344,30 @@ const Parser = struct {
                 return Error.ParseError;
             },
         }
+    }
+
+    fn decodeString(self: *Parser, lexeme: []const u8) Error![]const u8 {
+        const content = lexeme[1 .. lexeme.len - 1];
+        var buf = std.ArrayList(u8).init(self.arena);
+        var i: usize = 0;
+        while (i < content.len) {
+            if (content[i] == '\\' and i + 1 < content.len) {
+                i += 1;
+                const mapped: u8 = switch (content[i]) {
+                    'n' => '\n',
+                    't' => '\t',
+                    'r' => '\r',
+                    '"' => '"',
+                    '\\' => '\\',
+                    else => content[i],
+                };
+                try buf.append(mapped);
+            } else {
+                try buf.append(content[i]);
+            }
+            i += 1;
+        }
+        return buf.toOwnedSlice();
     }
 
     fn newExpr(self: *Parser, pos: ast.Pos, data: ast.Expr.Data) Error!*ast.Expr {

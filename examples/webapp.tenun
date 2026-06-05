@@ -1,0 +1,24 @@
+fungsi tangani(metode: teks, jalur: teks, badan: teks): teks {
+    kalau jalur == "/api" {
+        headerKan("Content-Type", "application/json");
+        biar nama: teks = jsonTeks(badan, "nama");
+        kembali "{\"halo\":\"" + nama + "\"}";
+    }
+
+    biar berkas: teks = "examples/publik" + jalur;
+    kalau jalur == "/" {
+        berkas = "examples/publik/index.html";
+    }
+
+    kalau adaFile(berkas) {
+        headerKan("Content-Type", tipeKonten(berkas));
+        kembali bacaFile(berkas);
+    }
+
+    statusKan(404);
+    headerKan("Content-Type", "text/plain; charset=utf-8");
+    kembali "404 - tidak ditemukan: " + jalur;
+}
+
+cetak("web app siap");
+layani(8080);
