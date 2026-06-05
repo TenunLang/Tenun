@@ -215,6 +215,11 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `petaPunya(m: peta, k: teks): bool` | apakah kunci ada di peta | `[JALAN]` |
 | `petaKunci(m: peta): []teks` | semua kunci peta | `[JALAN]` |
 | `petaHapus(m: peta, k: teks): kosong` | hapus kunci dari peta | `[JALAN]` |
+| `httpKirim(metode, url, header, body: teks): teks` | HTTP request (TLS auto utk https) | `[JALAN]` |
+| `sambungAman(inang: teks, port: bulat): bulat` | sambung soket TLS, kembalikan handle | `[JALAN]` |
+| `kirimAman(soket: bulat, data: teks): kosong` | kirim lewat soket TLS | `[JALAN]` |
+| `terimaAman(soket: bulat, n: bulat): teks` | terima dari soket TLS | `[JALAN]` |
+| `tutupAman(soket: bulat): kosong` | tutup soket TLS | `[JALAN]` |
 | `panjangTeks(teks): bulat` | panjang teks (jumlah byte) | `[JALAN]` |
 | `potong(teks, mulai: bulat, jumlah: bulat): teks` | substring | `[JALAN]` |
 | `akar(desimal): desimal` | akar kuadrat | `[JALAN]` |

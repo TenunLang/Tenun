@@ -67,6 +67,11 @@ pub const list = [_]Spec{
     .{ .name = "petaPunya", .params = &.{ .peta, .teks }, .ret = .bool },
     .{ .name = "petaKunci", .params = &.{.peta}, .ret = teks_array },
     .{ .name = "petaHapus", .params = &.{ .peta, .teks }, .ret = .kosong },
+    .{ .name = "httpKirim", .params = &.{ .teks, .teks, .teks, .teks }, .ret = .teks },
+    .{ .name = "sambungAman", .params = &.{ .teks, .bulat }, .ret = .bulat },
+    .{ .name = "kirimAman", .params = &.{ .bulat, .teks }, .ret = .kosong },
+    .{ .name = "terimaAman", .params = &.{ .bulat, .bulat }, .ret = .teks },
+    .{ .name = "tutupAman", .params = &.{.bulat}, .ret = .kosong },
 };
 
 pub const layani_id = 9;

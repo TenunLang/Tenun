@@ -2,6 +2,12 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — HTTP POST + soket TLS (httpKirim, sambungAman/kirimAman/terimaAman/tutupAman)
+
+- `httpKirim(metode, url, header, body): teks` (56) — HTTP umum (POST/PUT/DELETE/PATCH/GET) dengan header + body, TLS otomatis untuk https (via std.http.Client). Header: baris "Nama: Nilai" dipisah `\n`.
+- Soket TLS klien: `sambungAman(inang, port): bulat` (57), `kirimAman(soket, data): kosong` (58), `terimaAman(soket, n): teks` (59), `tutupAman(soket): kosong` (60). Pakai std.crypto.tls.Client + CA bundle sistem. `src/builtins/tls.zig` (pool koneksi, page_allocator, mutex). Total builtin id 0-60.
+- Memungkinkan: IMAPS (Gmail 993, terbukti live), SMTPS (465), REST API ber-TLS (Resend, terbukti kirim email live). modul-mail kini lengkap.
+
 ## 2026-06-05 — Tipe `peta` (map teks->teks)
 
 - Tipe baru `peta`: map berkunci teks bernilai teks (statis penuh). Literal `peta{ "k": "v", ... }` (kosong `peta{}`). Baca `m["k"]` (kunci hilang -> `""`). Tulis `m["k"] = "v"`.

@@ -9,6 +9,7 @@ const json = @import("../builtins/json.zig");
 const kv = @import("../builtins/kv.zig");
 const crypto = @import("../builtins/crypto.zig");
 const binary = @import("../builtins/binary.zig");
+const tls = @import("../builtins/tls.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -513,6 +514,17 @@ pub const Interpreter = struct {
             },
             55 => blk: {
                 _ = args[0].peta.remove(args[1].teks);
+                break :blk .kosong;
+            },
+            56 => .{ .teks = http.kirim(a, args[0].teks, args[1].teks, args[2].teks, args[3].teks) catch return self.runtimeError(pos, "gagal kirim HTTP") },
+            57 => .{ .bulat = tls.connect(args[0].teks, @intCast(args[1].bulat)) catch -1 },
+            58 => blk: {
+                tls.send(args[0].bulat, args[1].teks) catch return self.runtimeError(pos, "gagal kirim TLS");
+                break :blk .kosong;
+            },
+            59 => .{ .teks = tls.recv(a, args[0].bulat, @intCast(args[1].bulat)) catch return self.runtimeError(pos, "gagal terima TLS") },
+            60 => blk: {
+                tls.close(args[0].bulat);
                 break :blk .kosong;
             },
             else => unreachable,
