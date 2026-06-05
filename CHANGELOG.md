@@ -2,6 +2,12 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Optimasi VM: variabel global pakai slot array
+
+- Variabel global di-resolve ke indeks slot saat kompilasi (bukan lookup `StringHashMap` per akses). `define_global`/`get_global`/`set_global` sekarang operand = slot index langsung; VM simpan `global_slots: []Value`.
+- Benchmark loop 3 juta iterasi (akumulator global): 2.11s -> 0.58s (~3.7x). Hasil identik.
+- Worker server menyalin slot via `@memcpy` (sebelumnya iterasi hashmap).
+
 ## 2026-06-05 — Tooling: tenun fmt + repl, builtin bacaFloat
 
 - `tenun fmt <file>` — formatter kanonik (indentasi 4 spasi, kurawal K&R, precedence-aware: paren minimal). `--stdout`/`--cek` untuk cetak tanpa tulis. Implementasi `src/fmt/fmt.zig` (pretty-print AST).

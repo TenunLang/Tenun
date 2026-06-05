@@ -106,6 +106,7 @@ const Compiler = struct {
     diags: *Diagnostics,
     functions: std.ArrayList(Function),
     fn_index: std.StringHashMap(usize),
+    global_index: std.StringHashMap(u16),
     cur: *FnCompiler = undefined,
 
     fn init(allocator: std.mem.Allocator, diags: *Diagnostics) Compiler {
@@ -114,12 +115,23 @@ const Compiler = struct {
             .diags = diags,
             .functions = std.ArrayList(Function).init(allocator),
             .fn_index = std.StringHashMap(usize).init(allocator),
+            .global_index = std.StringHashMap(u16).init(allocator),
         };
     }
     fn deinit(self: *Compiler) void {
         for (self.functions.items) |*f| f.chunk.deinit();
         self.functions.deinit();
         self.fn_index.deinit();
+        self.global_index.deinit();
+    }
+
+    // Slot global untuk sebuah nama (buat baru bila belum ada). Akses global jadi
+    // indeks array, bukan lookup hashmap saat runtime.
+    fn globalSlot(self: *Compiler, name: []const u8) !u16 {
+        if (self.global_index.get(name)) |s| return s;
+        const slot: u16 = @intCast(self.global_index.count());
+        try self.global_index.put(name, slot);
+        return slot;
     }
 
     fn compileProgram(self: *Compiler, program: ast.Program) !void {
@@ -194,9 +206,9 @@ const Compiler = struct {
             .var_decl => |d| {
                 try self.expr(d.value);
                 if (self.cur.scope_depth == 0) {
-                    const ni = try c.addConst(.{ .teks = d.name });
+                    const slot = try self.globalSlot(d.name);
                     try c.emitOp(.define_global);
-                    try c.emitU16(ni);
+                    try c.emitU16(slot);
                 } else {
                     _ = self.declareLocal(d.name);
                 }
@@ -284,9 +296,9 @@ const Compiler = struct {
                 if (self.resolveLocal(name)) |slot| {
                     try self.emitGetLocal(slot);
                 } else {
-                    const i = try c.addConst(.{ .teks = name });
+                    const slot = try self.globalSlot(name);
                     try c.emitOp(.get_global);
-                    try c.emitU16(i);
+                    try c.emitU16(slot);
                 }
             },
             .unary => |u| {
@@ -363,9 +375,9 @@ const Compiler = struct {
                             try c.emitOp(.set_local);
                             try c.emit(@intCast(slot));
                         } else {
-                            const i = try c.addConst(.{ .teks = name });
+                            const slot = try self.globalSlot(name);
                             try c.emitOp(.set_global);
-                            try c.emitU16(i);
+                            try c.emitU16(slot);
                         }
                     },
                     .index => |ix| {
@@ -427,7 +439,7 @@ const VM = struct {
     stack: []Value,
     top: usize,
     frames: std.ArrayList(Frame),
-    globals: std.StringHashMap(Value),
+    global_slots: []Value,
     vals: std.heap.ArenaAllocator,
     resp_status: u16 = 200,
     resp_headers: [32]std.http.Header = undefined,
@@ -436,7 +448,9 @@ const VM = struct {
     req_header_count: usize = 0,
     conns: std.ArrayList(?std.net.Stream),
 
-    fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter, functions: []Function) !VM {
+    fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter, functions: []Function, num_globals: usize) !VM {
+        const slots = try allocator.alloc(Value, num_globals);
+        for (slots) |*g| g.* = .kosong;
         return .{
             .allocator = allocator,
             .diags = diags,
@@ -445,7 +459,7 @@ const VM = struct {
             .stack = try allocator.alloc(Value, stack_max),
             .top = 0,
             .frames = std.ArrayList(Frame).init(allocator),
-            .globals = std.StringHashMap(Value).init(allocator),
+            .global_slots = slots,
             .vals = std.heap.ArenaAllocator.init(allocator),
             .conns = std.ArrayList(?std.net.Stream).init(allocator),
         };
@@ -453,7 +467,7 @@ const VM = struct {
     fn deinit(self: *VM) void {
         self.allocator.free(self.stack);
         self.frames.deinit();
-        self.globals.deinit();
+        self.allocator.free(self.global_slots);
         self.vals.deinit();
         for (self.conns.items) |c| if (c) |s| s.close();
         self.conns.deinit();
@@ -526,19 +540,16 @@ const VM = struct {
                 },
                 .pop => _ = self.pop(),
                 .define_global => {
-                    const i = readU16(code, &frame.ip);
-                    const name = frame.func.chunk.consts.items[i].teks;
-                    try self.globals.put(name, self.pop());
+                    const slot = readU16(code, &frame.ip);
+                    self.global_slots[slot] = self.pop();
                 },
                 .get_global => {
-                    const i = readU16(code, &frame.ip);
-                    const name = frame.func.chunk.consts.items[i].teks;
-                    self.push(self.globals.get(name).?);
+                    const slot = readU16(code, &frame.ip);
+                    self.push(self.global_slots[slot]);
                 },
                 .set_global => {
-                    const i = readU16(code, &frame.ip);
-                    const name = frame.func.chunk.consts.items[i].teks;
-                    try self.globals.put(name, self.peek());
+                    const slot = readU16(code, &frame.ip);
+                    self.global_slots[slot] = self.peek();
                 },
                 .get_local => {
                     const slot = code[frame.ip];
@@ -837,7 +848,7 @@ const VM = struct {
             .out = self.out,
             .functions = self.functions,
             .tangani_idx = tangani_idx,
-            .src_globals = &self.globals,
+            .src_globals = self.global_slots,
             .listener = &listener,
         };
 
@@ -913,15 +924,14 @@ const WorkerCtx = struct {
     out: std.io.AnyWriter,
     functions: []Function,
     tangani_idx: usize,
-    src_globals: *std.StringHashMap(Value),
+    src_globals: []Value,
     listener: *std.net.Server,
 };
 
 fn workerLoop(ctx: WorkerCtx) void {
-    var vm = VM.init(ctx.allocator, ctx.diags, ctx.out, ctx.functions) catch return;
+    var vm = VM.init(ctx.allocator, ctx.diags, ctx.out, ctx.functions, ctx.src_globals.len) catch return;
     defer vm.deinit();
-    var it = ctx.src_globals.iterator();
-    while (it.next()) |e| vm.globals.put(e.key_ptr.*, e.value_ptr.*) catch {};
+    @memcpy(vm.global_slots, ctx.src_globals);
     while (true) {
         const conn = ctx.listener.accept() catch continue;
         vm.handleConn(conn, ctx.tangani_idx);
@@ -958,7 +968,7 @@ pub fn run(allocator: std.mem.Allocator, program: ast.Program, diags: *Diagnosti
     try compiler.compileProgram(program);
     if (diags.hasErrors()) return;
 
-    var vm = try VM.init(allocator, diags, out, compiler.functions.items);
+    var vm = try VM.init(allocator, diags, out, compiler.functions.items, compiler.global_index.count());
     defer vm.deinit();
     try vm.run();
 }
