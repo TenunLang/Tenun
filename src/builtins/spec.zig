@@ -74,6 +74,7 @@ pub const list = [_]Spec{
     .{ .name = "tutupAman", .params = &.{.bulat}, .ret = .kosong },
     .{ .name = "layaniSoket", .params = &.{.bulat}, .ret = .kosong },
     .{ .name = "siarkan", .params = &.{.teks}, .ret = .kosong },
+    .{ .name = "argumen", .params = &.{}, .ret = teks_array },
 };
 
 pub const layani_id = 9;

@@ -7,8 +7,25 @@ const Interpreter = @import("interp/interp.zig").Interpreter;
 const vm = @import("vm/vm.zig");
 const codegen = @import("codegen/codegen.zig");
 const fmt = @import("fmt/fmt.zig");
+const argv = @import("builtins/argv.zig");
 
-pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool) !void {
+// Baca perintah skrip dari "skrip" di tenun.json (mirip "scripts" npm/bun).
+pub fn bacaSkrip(allocator: std.mem.Allocator, nama: []const u8) ![]u8 {
+    const data = try readFile(allocator, "tenun.json");
+    defer allocator.free(data);
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), data, .{}) catch return error.SkripTidakAda;
+    if (parsed != .object) return error.SkripTidakAda;
+    const skrip = parsed.object.get("skrip") orelse return error.SkripTidakAda;
+    if (skrip != .object) return error.SkripTidakAda;
+    const v = skrip.object.get(nama) orelse return error.SkripTidakAda;
+    if (v != .string) return error.SkripTidakAda;
+    return allocator.dupe(u8, v.string);
+}
+
+pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool, prog_args: []const []const u8) !void {
+    argv.list = prog_args;
     const source = try loadProgram(allocator, path);
     defer allocator.free(source);
 

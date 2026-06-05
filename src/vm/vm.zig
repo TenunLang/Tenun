@@ -11,6 +11,7 @@ const crypto = @import("../builtins/crypto.zig");
 const binmod = @import("../builtins/binary.zig");
 const tls = @import("../builtins/tls.zig");
 const siar = @import("../builtins/siar.zig");
+const argv = @import("../builtins/argv.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -774,6 +775,11 @@ const VM = struct {
             62 => blk: {
                 siar.broadcast(args[0].teks);
                 break :blk Value.kosong;
+            },
+            63 => blk: {
+                const arr = a.alloc(Value, argv.list.len) catch return self.rt("kehabisan memori");
+                for (argv.list, 0..) |s, i| arr[i] = .{ .teks = s };
+                break :blk Value{ .array = arr };
             },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
