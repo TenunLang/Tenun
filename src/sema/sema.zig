@@ -54,6 +54,7 @@ const Sema = struct {
     functions: std.StringHashMap(FnSig),
     scopes: std.ArrayList(std.StringHashMap(VarInfo)),
     type_arena: std.heap.ArenaAllocator,
+    loop_depth: usize = 0,
 
     fn deinit(self: *Sema) void {
         var it = self.functions.valueIterator();
@@ -133,7 +134,9 @@ const Sema = struct {
             .while_stmt => |d| {
                 const c = try self.checkExpr(d.cond);
                 if (c) |t| if (!t.eql(.bool)) try self.report(stmt.pos, "kondisi 'selama' harus bertipe bool");
+                self.loop_depth += 1;
                 try self.checkBlock(d.body, ret);
+                self.loop_depth -= 1;
             },
             .for_stmt => |d| {
                 const st = try self.checkExpr(d.start);
@@ -143,7 +146,15 @@ const Sema = struct {
                 try self.pushScope();
                 defer self.popScope();
                 try self.define(stmt.pos, d.var_name, .{ .type = .bulat, .is_const = false });
+                self.loop_depth += 1;
                 try self.checkBlock(d.body, ret);
+                self.loop_depth -= 1;
+            },
+            .break_stmt => {
+                if (self.loop_depth == 0) try self.report(stmt.pos, "'henti' hanya boleh di dalam loop");
+            },
+            .continue_stmt => {
+                if (self.loop_depth == 0) try self.report(stmt.pos, "'lanjut' hanya boleh di dalam loop");
             },
             .return_stmt => |maybe| {
                 if (ret == null) {

@@ -141,6 +141,8 @@ pub const Stmt = struct {
         while_stmt: While,
         for_stmt: For,
         return_stmt: ?*Expr,
+        break_stmt,
+        continue_stmt,
         block: []*Stmt,
     };
 
@@ -259,6 +261,8 @@ fn dumpStmt(stmt: *Stmt, writer: anytype) anyerror!void {
             }
             try writer.writeByte(')');
         },
+        .break_stmt => try writer.writeAll("(henti)"),
+        .continue_stmt => try writer.writeAll("(lanjut)"),
         .block => |stmts| try dumpStmts(stmts, writer),
     }
 }

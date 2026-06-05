@@ -2,6 +2,11 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — henti & lanjut (break / continue)
+
+- `henti;` (break) dan `lanjut;` (continue) di dalam `selama`/`untuk`. Keyword baru `henti`, `lanjut`.
+- Sema: hanya valid di dalam loop. VM: LoopCtx stack (patch break forward-jump; continue mundur utk selama / maju ke increment utk untuk; pop lokal body sebelum lompat). Interp: flag breaking/continuing. Codegen native: `break;`/`continue;`.
+
 ## 2026-06-05 — Server soket mentah (layaniSoket) untuk WebSocket/protokol kustom
 
 - Builtin `layaniSoket(port): kosong` (61) — server TCP mentah, thread-per-koneksi, tiap koneksi panggil fungsi `koneksi(soket: bulat): kosong`. Soket dipakai dgn terima/terimaPasti/kirim/tutup yang sudah ada. Total builtin id 0-61.

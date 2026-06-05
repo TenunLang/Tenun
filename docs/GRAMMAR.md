@@ -15,7 +15,7 @@ params      = param ("," param)* ;
 param       = IDENT ":" tipe ;
 tipe        = "[" "]" tipe | "bulat" | "desimal" | "teks" | "bool" | "peta" | "kosong" ;
 
-statement   = exprStmt | ifStmt | whileStmt | forStmt | returnStmt | blok ;
+statement   = exprStmt | ifStmt | whileStmt | forStmt | returnStmt | "henti" ";" | "lanjut" ";" | blok ;
 exprStmt    = ekspresi ";" ;
 ifStmt      = "kalau" ekspresi blok ("lain" (ifStmt | blok))? ;
 whileStmt   = "selama" ekspresi blok ;

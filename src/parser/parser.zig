@@ -79,6 +79,16 @@ const Parser = struct {
         if (self.check(.kw_selama)) return self.whileStmt();
         if (self.check(.kw_untuk)) return self.forStmt();
         if (self.check(.kw_kembali)) return self.returnStmt();
+        if (self.check(.kw_henti)) {
+            const kw = self.advance();
+            _ = try self.expect(.semicolon, "harap ';' setelah henti");
+            return self.newStmt(posOf(kw), .break_stmt);
+        }
+        if (self.check(.kw_lanjut)) {
+            const kw = self.advance();
+            _ = try self.expect(.semicolon, "harap ';' setelah lanjut");
+            return self.newStmt(posOf(kw), .continue_stmt);
+        }
         if (self.check(.lbrace)) {
             const lb = self.peek();
             const stmts = try self.block();

@@ -108,12 +108,22 @@ const FnCompiler = struct {
     scope_depth: i32 = 0,
 };
 
+// Konteks loop untuk henti (break) & lanjut (continue).
+const LoopCtx = struct {
+    base_locals: usize,
+    break_jumps: std.ArrayList(usize),
+    cont_backward: bool, // selama: lanjut lompat mundur ke cond
+    cont_target: usize, // dipakai bila cont_backward
+    cont_jumps: std.ArrayList(usize), // untuk: lanjut lompat maju ke increment
+};
+
 const Compiler = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
     functions: std.ArrayList(Function),
     fn_index: std.StringHashMap(usize),
     global_index: std.StringHashMap(u16),
+    loops: std.ArrayList(LoopCtx),
     cur: *FnCompiler = undefined,
 
     fn init(allocator: std.mem.Allocator, diags: *Diagnostics) Compiler {
@@ -123,6 +133,7 @@ const Compiler = struct {
             .functions = std.ArrayList(Function).init(allocator),
             .fn_index = std.StringHashMap(usize).init(allocator),
             .global_index = std.StringHashMap(u16).init(allocator),
+            .loops = std.ArrayList(LoopCtx).init(allocator),
         };
     }
     fn deinit(self: *Compiler) void {
@@ -130,6 +141,7 @@ const Compiler = struct {
         self.functions.deinit();
         self.fn_index.deinit();
         self.global_index.deinit();
+        self.loops.deinit();
     }
 
     // Slot global untuk sebuah nama (buat baru bila belum ada). Akses global jadi
@@ -242,10 +254,18 @@ const Compiler = struct {
                 try self.expr(d.cond);
                 const exit_jump = try self.emitJump(.jump_if_false);
                 try c.emitOp(.pop);
+                try self.loops.append(.{
+                    .base_locals = self.cur.local_count,
+                    .break_jumps = std.ArrayList(usize).init(self.allocator),
+                    .cont_backward = true,
+                    .cont_target = loop_start,
+                    .cont_jumps = std.ArrayList(usize).init(self.allocator),
+                });
                 try self.block(d.body);
                 try self.emitLoop(loop_start);
                 try self.patchJump(exit_jump);
                 try c.emitOp(.pop);
+                try self.akhiriLoop();
             },
             .for_stmt => |d| {
                 self.beginScope();
@@ -259,7 +279,18 @@ const Compiler = struct {
                 try c.emitOp(.lt);
                 const exit_jump = try self.emitJump(.jump_if_false);
                 try c.emitOp(.pop);
+                try self.loops.append(.{
+                    .base_locals = self.cur.local_count,
+                    .break_jumps = std.ArrayList(usize).init(self.allocator),
+                    .cont_backward = false,
+                    .cont_target = 0,
+                    .cont_jumps = std.ArrayList(usize).init(self.allocator),
+                });
                 try self.block(d.body);
+                // Titik 'lanjut' (continue): increment i.
+                const incr = c.code.items.len;
+                for (self.loops.items[self.loops.items.len - 1].cont_jumps.items) |cj| try self.patchJump(cj);
+                _ = incr;
                 try self.emitGetLocal(slot_i);
                 const one = try c.addConst(.{ .bulat = 1 });
                 try c.emitOp(.constant);
@@ -271,7 +302,26 @@ const Compiler = struct {
                 try self.emitLoop(loop_start);
                 try self.patchJump(exit_jump);
                 try c.emitOp(.pop);
+                try self.akhiriLoop();
                 try self.endScope();
+            },
+            .break_stmt => {
+                const lc = &self.loops.items[self.loops.items.len - 1];
+                var k = self.cur.local_count;
+                while (k > lc.base_locals) : (k -= 1) try c.emitOp(.pop);
+                const j = try self.emitJump(.jump);
+                try lc.break_jumps.append(j);
+            },
+            .continue_stmt => {
+                const lc = &self.loops.items[self.loops.items.len - 1];
+                var k = self.cur.local_count;
+                while (k > lc.base_locals) : (k -= 1) try c.emitOp(.pop);
+                if (lc.cont_backward) {
+                    try self.emitLoop(lc.cont_target);
+                } else {
+                    const j = try self.emitJump(.jump);
+                    try lc.cont_jumps.append(j);
+                }
             },
             .return_stmt => |maybe| {
                 if (maybe) |e| try self.expr(e) else try c.emitOp(.kosong_);
@@ -452,6 +502,14 @@ const Compiler = struct {
         try self.cur.chunk.emitOp(.loop);
         const dist = self.cur.chunk.code.items.len - loop_start + 2;
         try self.cur.chunk.emitU16(@intCast(dist));
+    }
+
+    // Tutup loop: patch semua jump 'henti' ke posisi sekarang, bersihkan ctx.
+    fn akhiriLoop(self: *Compiler) !void {
+        var lc = self.loops.pop().?;
+        for (lc.break_jumps.items) |bj| try self.patchJump(bj);
+        lc.break_jumps.deinit();
+        lc.cont_jumps.deinit();
     }
 };
 

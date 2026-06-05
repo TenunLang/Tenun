@@ -104,6 +104,8 @@ fn stmt(s: *ast.Stmt, writer: anytype, level: usize) anyerror!void {
             }
             try writer.writeByte(';');
         },
+        .break_stmt => try writer.writeAll("henti;"),
+        .continue_stmt => try writer.writeAll("lanjut;"),
         .block => |stmts| try block(stmts, writer, level),
     }
 }

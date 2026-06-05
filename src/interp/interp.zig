@@ -37,6 +37,8 @@ pub const Interpreter = struct {
     locals: std.ArrayList(Scope),
     vals: std.heap.ArenaAllocator,
     returning: bool = false,
+    breaking: bool = false,
+    continuing: bool = false,
     ret_value: Value = .kosong,
     resp_status: u16 = 200,
     resp_headers: [32]std.http.Header = undefined,
@@ -102,6 +104,11 @@ pub const Interpreter = struct {
                 while ((try self.eval(d.cond)).bool) {
                     try self.execBlock(d.body);
                     if (self.returning) break;
+                    if (self.breaking) {
+                        self.breaking = false;
+                        break;
+                    }
+                    if (self.continuing) self.continuing = false;
                 }
             },
             .for_stmt => |d| {
@@ -118,12 +125,19 @@ pub const Interpreter = struct {
                     try self.locals.items[loop_idx].put(d.var_name, .{ .bulat = i });
                     try self.execBlock(d.body);
                     if (self.returning) break;
+                    if (self.breaking) {
+                        self.breaking = false;
+                        break;
+                    }
+                    if (self.continuing) self.continuing = false;
                 }
             },
             .return_stmt => |maybe| {
                 self.ret_value = if (maybe) |e| try self.eval(e) else .kosong;
                 self.returning = true;
             },
+            .break_stmt => self.breaking = true,
+            .continue_stmt => self.continuing = true,
             .block => |stmts| try self.execBlock(stmts),
         }
     }
@@ -136,7 +150,7 @@ pub const Interpreter = struct {
         }
         for (stmts) |stmt| {
             try self.exec(stmt);
-            if (self.returning) break;
+            if (self.returning or self.breaking or self.continuing) break;
         }
     }
 

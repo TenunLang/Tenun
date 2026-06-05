@@ -211,6 +211,8 @@ const Codegen = struct {
                     try self.w(";\n");
                 } else try self.w("return;\n");
             },
+            .break_stmt => try self.w("break;\n"),
+            .continue_stmt => try self.w("continue;\n"),
         }
     }
 

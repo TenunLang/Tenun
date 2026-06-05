@@ -217,6 +217,24 @@ untuk i dari 1 sampai 5 {
 
 `untuk <nama> dari <awal> sampai <akhir>` mengulang dengan `nama` bernilai `awal`, `awal+1`, ... sampai `akhir - 1` (batas akhir **eksklusif**, langkah +1). Contoh di atas mencetak 1, 2, 3, 4. `awal` dan `akhir` harus bertipe `bulat`. Variabel iterasi bertipe `bulat` dan hanya hidup di dalam blok.
 
+### henti & lanjut (break / continue) `[JALAN]`
+
+Di dalam `selama` atau `untuk`:
+
+- `henti;` — keluar dari loop (break).
+- `lanjut;` — lompat ke iterasi berikutnya (continue).
+
+```tenun
+biar total: bulat = 0;
+untuk i dari 0 sampai 10 {
+    kalau i % 2 == 0 { lanjut; }   // lewati genap
+    kalau i > 7 { henti; }         // berhenti setelah lewat 7
+    total = total + i;
+}
+```
+
+`henti`/`lanjut` hanya boleh di dalam loop (di luar loop = error kompilasi).
+
 ## 7. Fungsi [JALAN]
 
 Fungsi mendukung rekursi.
