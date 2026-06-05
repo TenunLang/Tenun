@@ -10,6 +10,7 @@ const kv = @import("../builtins/kv.zig");
 const crypto = @import("../builtins/crypto.zig");
 const binmod = @import("../builtins/binary.zig");
 const tls = @import("../builtins/tls.zig");
+const siar = @import("../builtins/siar.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -770,6 +771,10 @@ const VM = struct {
             },
             9 => self.serve(@intCast(args[0].bulat)),
             61 => self.serveSoket(@intCast(args[0].bulat)),
+            62 => blk: {
+                siar.broadcast(args[0].teks);
+                break :blk Value.kosong;
+            },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk Value.kosong;
@@ -1087,6 +1092,8 @@ fn soketConnLoop(ctx: SoketConnCtx) void {
         ctx.stream.close();
         return;
     };
+    const bid = siar.register(ctx.stream);
+    defer siar.unregister(bid);
     const handle: i64 = @intCast(vm.conns.items.len - 1);
     _ = vm.callTenunFn(ctx.koneksi_idx, &.{.{ .bulat = handle }}) catch {};
 }

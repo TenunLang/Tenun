@@ -10,6 +10,7 @@ const kv = @import("../builtins/kv.zig");
 const crypto = @import("../builtins/crypto.zig");
 const binary = @import("../builtins/binary.zig");
 const tls = @import("../builtins/tls.zig");
+const siar = @import("../builtins/siar.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -351,7 +352,9 @@ pub const Interpreter = struct {
                 continue;
             };
             const handle: i64 = @intCast(self.conns.items.len - 1);
+            const bid = siar.register(conn.stream);
             _ = self.invokeUser(fn_stmt, &.{.{ .bulat = handle }}) catch {};
+            siar.unregister(bid);
             const idx: usize = @intCast(handle);
             if (self.conns.items[idx]) |s| {
                 s.close();
@@ -423,6 +426,10 @@ pub const Interpreter = struct {
             },
             9 => self.serve(@intCast(args[0].bulat)),
             61 => self.serveSoket(@intCast(args[0].bulat)),
+            62 => blk: {
+                siar.broadcast(args[0].teks);
+                break :blk Value.kosong;
+            },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk .kosong;
