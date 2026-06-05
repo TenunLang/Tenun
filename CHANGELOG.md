@@ -2,6 +2,13 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Builtin keBulat/keTeks + modul Redis & PostgreSQL (SELESAI)
+
+- Builtin id 46 `keBulat(teks): bulat`, id 47 `keTeks(bulat): teks` (konversi angka↔teks via std.fmt). Total builtin id 0-47.
+- **`TenunLang/modul-redis`** — klien Redis (RESP) ditulis dengan Tenun. Parser RESP (simple/error/integer/bulk/array) terverifikasi (uji sintetis).
+- **`TenunLang/modul-postgres`** — klien PostgreSQL (protokol v3): startup + auth trust/cleartext/md5, query, parser DataRow. Terverifikasi ke PostgreSQL lokal (auth trust): `SELECT` multi-baris/kolom + `generate_series`. SCRAM-SHA-256 belum (perlu primitif kripto tambahan).
+- Tiga modul resmi sekarang: mysql, redis, postgres — semua repo terpisah `TenunLang/modul-<nama>` dengan `tenun.json` + `src/`.
+
 ## 2026-06-05 — Impor berkas lokal (multi-berkas) (SELESAI)
 
 `impor` kini mendukung berkas lokal selain modul, dengan resolusi rekursif — bisa membagi program ke banyak berkas (ala Node.js).

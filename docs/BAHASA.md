@@ -230,6 +230,9 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `acak(jumlah: bulat): teks` | byte acak aman (hex, 2×jumlah char) | `[JALAN]` |
 | `sha1Raw(data: teks): teks` | SHA-1 byte mentah (20 byte, untuk protokol) | `[JALAN]` |
 | `xor(a: teks, b: teks): teks` | XOR byte-per-byte | `[JALAN]` |
+| `terimaPasti(soket: bulat, n: bulat): teks` | baca persis `n` byte dari koneksi | `[JALAN]` |
+| `keBulat(teks): bulat` | ubah teks ke bilangan | `[JALAN]` |
+| `keTeks(bulat): teks` | ubah bilangan ke teks | `[JALAN]` |
 | `keByte(nilai: bulat, lebar: bulat, besar: bool): teks` | encode integer ke `lebar` byte (besar=big-endian) | `[JALAN]` |
 | `bacaInt(data: teks, offset: bulat, lebar: bulat, besar: bool): bulat` | baca integer dari byte | `[JALAN]` |
 | `jsonTeks(json: teks, kunci: teks): teks` | ambil field teks dari JSON (top-level) | `[JALAN]` |

@@ -469,6 +469,8 @@ pub const Interpreter = struct {
                 };
                 break :blk .{ .teks = buf[0..got] };
             },
+            46 => .{ .bulat = std.fmt.parseInt(i64, std.mem.trim(u8, args[0].teks, " \t\r\n"), 10) catch 0 },
+            47 => .{ .teks = std.fmt.allocPrint(a, "{d}", .{args[0].bulat}) catch return self.runtimeError(pos, "kehabisan memori") },
             else => unreachable,
         };
     }

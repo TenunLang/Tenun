@@ -794,6 +794,8 @@ const VM = struct {
                 };
                 break :blk Value{ .teks = buf[0..got] };
             },
+            46 => .{ .bulat = std.fmt.parseInt(i64, std.mem.trim(u8, args[0].teks, " \t\r\n"), 10) catch 0 },
+            47 => .{ .teks = std.fmt.allocPrint(a, "{d}", .{args[0].bulat}) catch return self.rt("kehabisan memori") },
             else => unreachable,
         };
     }
