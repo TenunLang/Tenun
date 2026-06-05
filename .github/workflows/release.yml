@@ -37,9 +37,9 @@ jobs:
           cp zig-out/bin/tenun.exe dist/tenun-windows-x86_64.exe
 
       - name: Install packaging tools
-        run: sudo apt-get update && sudo apt-get install -y wixl
+        run: sudo apt-get update && sudo apt-get install -y nsis
 
-      - name: Build installers (DEB + MSI)
+      - name: Build installers (DEB + Windows setup)
         run: |
           VER=0.0.${{ github.run_number }}
           # DEB amd64
@@ -52,10 +52,9 @@ jobs:
           cp dist/tenun-linux-aarch64 deb/usr/bin/tenun
           printf 'Package: tenun\nVersion: %s\nArchitecture: arm64\nMaintainer: TenunLang\nDescription: Bahasa pemrograman Tenun\n' "$VER" > deb/DEBIAN/control
           dpkg-deb --build deb "dist/tenun_${VER}_arm64.deb"
-          # MSI (Windows)
+          # Windows installer (.exe) via NSIS
           cp dist/tenun-windows-x86_64.exe tenun.exe
-          sed "s/@VERSION@/$VER/" packaging/tenun.wxs > tenun.gen.wxs
-          wixl -o "dist/tenun-${VER}-x86_64.msi" tenun.gen.wxs
+          makensis "-DOUTFILE=dist/tenun-${VER}-windows-setup.exe" "-DEXE=$PWD/tenun.exe" packaging/tenun.nsi
 
       - name: Release
         uses: softprops/action-gh-release@v2

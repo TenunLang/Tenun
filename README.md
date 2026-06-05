@@ -43,7 +43,7 @@ Windows (PowerShell):
 irm https://raw.githubusercontent.com/TenunLang/Tenun/main/install.ps1 | iex
 ```
 
-Skrip mengunduh binari rilis terbaru ke `~/.tenun/bin` dan menambahkannya ke PATH. Tersedia juga installer di halaman [Releases](https://github.com/TenunLang/Tenun/releases): `.deb` (Linux), `.msi` (Windows), dan binari mentah Linux/macOS/Windows.
+Skrip mengunduh binari rilis terbaru ke `~/.tenun/bin` dan menambahkannya ke PATH. Tersedia juga di halaman [Releases](https://github.com/TenunLang/Tenun/releases): paket `.deb` (Linux), installer `.exe` (Windows, NSIS), dan binari mentah Linux/macOS/Windows.
 
 ## Membangun compiler (dari sumber)
 
