@@ -140,6 +140,7 @@ pub const Stmt = struct {
         if_stmt: If,
         while_stmt: While,
         for_stmt: For,
+        foreach_stmt: ForEach,
         return_stmt: ?*Expr,
         break_stmt,
         continue_stmt,
@@ -175,6 +176,12 @@ pub const Stmt = struct {
         var_name: []const u8,
         start: *Expr,
         end: *Expr,
+        body: []*Stmt,
+    };
+
+    pub const ForEach = struct {
+        var_name: []const u8,
+        iter: *Expr,
         body: []*Stmt,
     };
 };
@@ -249,6 +256,13 @@ fn dumpStmt(stmt: *Stmt, writer: anytype) anyerror!void {
             try dumpExpr(d.start, writer);
             try writer.writeAll(" sampai ");
             try dumpExpr(d.end, writer);
+            try writer.writeByte(' ');
+            try dumpStmts(d.body, writer);
+            try writer.writeByte(')');
+        },
+        .foreach_stmt => |d| {
+            try writer.print("(untuk-tiap {s} ", .{d.var_name});
+            try dumpExpr(d.iter, writer);
             try writer.writeByte(' ');
             try dumpStmts(d.body, writer);
             try writer.writeByte(')');

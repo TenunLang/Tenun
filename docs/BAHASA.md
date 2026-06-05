@@ -217,6 +217,17 @@ untuk i dari 1 sampai 5 {
 
 `untuk <nama> dari <awal> sampai <akhir>` mengulang dengan `nama` bernilai `awal`, `awal+1`, ... sampai `akhir - 1` (batas akhir **eksklusif**, langkah +1). Contoh di atas mencetak 1, 2, 3, 4. `awal` dan `akhir` harus bertipe `bulat`. Variabel iterasi bertipe `bulat` dan hanya hidup di dalam blok.
 
+Iterasi elemen larik (for-each) `[JALAN]`:
+
+```tenun
+biar buah: []teks = ["apel", "mangga", "jeruk"];
+untuk b dari buah {
+    cetak(b);
+}
+```
+
+`untuk <nama> dari <larik>` (tanpa `sampai`) mengulang tiap elemen; `nama` bertipe sama dengan elemen larik. Bedakan dengan bentuk rentang `untuk i dari A sampai B`.
+
 ### henti & lanjut (break / continue) `[JALAN]`
 
 Di dalam `selama` atau `untuk`:

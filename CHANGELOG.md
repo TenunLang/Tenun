@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — for-each larik
+
+- `untuk x dari <larik> { }` — iterasi tiap elemen larik (tanpa `sampai`). Bentuk rentang `untuk i dari A sampai B` tetap ada. AST `foreach_stmt`. VM desugar ke loop indeks (dukung henti/lanjut). Codegen native: unsupported (pakai VM).
+
 ## 2026-06-06 — henti & lanjut (break / continue)
 
 - `henti;` (break) dan `lanjut;` (continue) di dalam `selama`/`untuk`. Keyword baru `henti`, `lanjut`.

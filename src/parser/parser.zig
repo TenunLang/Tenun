@@ -128,15 +128,23 @@ const Parser = struct {
     fn forStmt(self: *Parser) Error!*ast.Stmt {
         const kw = self.advance();
         const name = try self.expect(.identifier, "harap nama variabel iterasi setelah 'untuk'");
-        _ = try self.expect(.kw_dari, "harap 'dari' lalu nilai awal");
+        _ = try self.expect(.kw_dari, "harap 'dari' lalu nilai awal / larik");
         const start = try self.expression();
-        _ = try self.expect(.kw_sampai, "harap 'sampai' lalu nilai akhir");
-        const end = try self.expression();
+        // `untuk x dari A sampai B` (rentang) atau `untuk x dari larik` (foreach).
+        if (self.match(.kw_sampai)) {
+            const end = try self.expression();
+            const body = try self.block();
+            return self.newStmt(posOf(kw), .{ .for_stmt = .{
+                .var_name = name.lexeme,
+                .start = start,
+                .end = end,
+                .body = body,
+            } });
+        }
         const body = try self.block();
-        return self.newStmt(posOf(kw), .{ .for_stmt = .{
+        return self.newStmt(posOf(kw), .{ .foreach_stmt = .{
             .var_name = name.lexeme,
-            .start = start,
-            .end = end,
+            .iter = start,
             .body = body,
         } });
     }

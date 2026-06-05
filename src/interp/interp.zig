@@ -132,6 +132,25 @@ pub const Interpreter = struct {
                     if (self.continuing) self.continuing = false;
                 }
             },
+            .foreach_stmt => |d| {
+                const arr = try self.eval(d.iter);
+                try self.locals.append(Scope.init(self.allocator));
+                defer {
+                    var sc = self.locals.pop().?;
+                    sc.deinit();
+                }
+                const loop_idx = self.locals.items.len - 1;
+                for (arr.array) |el| {
+                    try self.locals.items[loop_idx].put(d.var_name, el);
+                    try self.execBlock(d.body);
+                    if (self.returning) break;
+                    if (self.breaking) {
+                        self.breaking = false;
+                        break;
+                    }
+                    if (self.continuing) self.continuing = false;
+                }
+            },
             .return_stmt => |maybe| {
                 self.ret_value = if (maybe) |e| try self.eval(e) else .kosong;
                 self.returning = true;

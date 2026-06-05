@@ -150,6 +150,23 @@ const Sema = struct {
                 try self.checkBlock(d.body, ret);
                 self.loop_depth -= 1;
             },
+            .foreach_stmt => |d| {
+                const it = try self.checkExpr(d.iter);
+                var elem: Type = .dinamis;
+                if (it) |t| {
+                    if (std.meta.activeTag(t) == .array) {
+                        elem = t.array.*;
+                    } else if (std.meta.activeTag(t) != .dinamis) {
+                        try self.report(stmt.pos, "'untuk x dari <larik>' butuh larik");
+                    }
+                }
+                try self.pushScope();
+                defer self.popScope();
+                try self.define(stmt.pos, d.var_name, .{ .type = elem, .is_const = false });
+                self.loop_depth += 1;
+                try self.checkBlock(d.body, ret);
+                self.loop_depth -= 1;
+            },
             .break_stmt => {
                 if (self.loop_depth == 0) try self.report(stmt.pos, "'henti' hanya boleh di dalam loop");
             },

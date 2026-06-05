@@ -19,7 +19,7 @@ statement   = exprStmt | ifStmt | whileStmt | forStmt | returnStmt | "henti" ";"
 exprStmt    = ekspresi ";" ;
 ifStmt      = "kalau" ekspresi blok ("lain" (ifStmt | blok))? ;
 whileStmt   = "selama" ekspresi blok ;
-forStmt     = "untuk" IDENT "dari" ekspresi "sampai" ekspresi blok ;
+forStmt     = "untuk" IDENT "dari" ekspresi ("sampai" ekspresi)? blok ;  (* rentang atau for-each larik *)
 returnStmt  = "kembali" ekspresi? ";" ;
 blok        = "{" deklarasi* "}" ;
 

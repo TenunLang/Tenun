@@ -96,6 +96,14 @@ fn stmt(s: *ast.Stmt, writer: anytype, level: usize) anyerror!void {
             try writer.writeByte(' ');
             try block(d.body, writer, level);
         },
+        .foreach_stmt => |d| {
+            try writer.writeAll("untuk ");
+            try writer.writeAll(d.var_name);
+            try writer.writeAll(" dari ");
+            try expr(d.iter, writer, 0);
+            try writer.writeByte(' ');
+            try block(d.body, writer, level);
+        },
         .return_stmt => |maybe| {
             try writer.writeAll("kembali");
             if (maybe) |e| {

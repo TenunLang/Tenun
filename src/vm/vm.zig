@@ -305,6 +305,54 @@ const Compiler = struct {
                 try self.akhiriLoop();
                 try self.endScope();
             },
+            .foreach_stmt => |d| {
+                self.beginScope();
+                try self.expr(d.iter);
+                const slot_arr = self.declareLocal("$arr");
+                const zero = try c.addConst(.{ .bulat = 0 });
+                try c.emitOp(.constant);
+                try c.emitU16(zero);
+                const slot_idx = self.declareLocal("$idx");
+                try c.emitOp(.kosong_);
+                const slot_x = self.declareLocal(d.var_name);
+                const loop_start = c.code.items.len;
+                try self.emitGetLocal(slot_idx);
+                try self.emitGetLocal(slot_arr);
+                try c.emitOp(.array_len);
+                try c.emitOp(.lt);
+                const exit_jump = try self.emitJump(.jump_if_false);
+                try c.emitOp(.pop);
+                // x = arr[idx]
+                try self.emitGetLocal(slot_arr);
+                try self.emitGetLocal(slot_idx);
+                try c.emitOp(.index_get);
+                try c.emitOp(.set_local);
+                try c.emit(@intCast(slot_x));
+                try c.emitOp(.pop);
+                try self.loops.append(.{
+                    .base_locals = self.cur.local_count,
+                    .break_jumps = std.ArrayList(usize).init(self.allocator),
+                    .cont_backward = false,
+                    .cont_target = 0,
+                    .cont_jumps = std.ArrayList(usize).init(self.allocator),
+                });
+                try self.block(d.body);
+                for (self.loops.items[self.loops.items.len - 1].cont_jumps.items) |cj| try self.patchJump(cj);
+                // idx = idx + 1
+                try self.emitGetLocal(slot_idx);
+                const one2 = try c.addConst(.{ .bulat = 1 });
+                try c.emitOp(.constant);
+                try c.emitU16(one2);
+                try c.emitOp(.add);
+                try c.emitOp(.set_local);
+                try c.emit(@intCast(slot_idx));
+                try c.emitOp(.pop);
+                try self.emitLoop(loop_start);
+                try self.patchJump(exit_jump);
+                try c.emitOp(.pop);
+                try self.akhiriLoop();
+                try self.endScope();
+            },
             .break_stmt => {
                 const lc = &self.loops.items[self.loops.items.len - 1];
                 var k = self.cur.local_count;
