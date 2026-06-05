@@ -2,6 +2,13 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Builtin kripto raw + pbkdf2 + dorong (SELESAI)
+
+- Builtin id 48 `dorong(larik []teks, item teks): []teks` (push). id 49 `sha256Raw`, 50 `hmacSha256Raw`, 51 `pbkdf2` (PBKDF2-HMAC-SHA256) — byte mentah, untuk protokol/SCRAM. Total builtin id 0-51.
+- `tenun add` auto-pasang dependensi modul (rekursif, baca `butuh`).
+- Diverifikasi vektor uji: `sha256("")`, `pbkdf2("password","salt",1)`, dan ClientProof SCRAM RFC 7677.
+- Memungkinkan: modul-mysql prepared statement biner, modul-postgres SCRAM-SHA-256, modul-orm produksi (params, relasi, skema). Modul resmi: mysql, postgres, redis, orm, json, rute, tampilan.
+
 ## 2026-06-05 — Builtin keBulat/keTeks + modul Redis & PostgreSQL (SELESAI)
 
 - Builtin id 46 `keBulat(teks): bulat`, id 47 `keTeks(bulat): teks` (konversi angka↔teks via std.fmt). Total builtin id 0-47.
