@@ -183,5 +183,15 @@ fn expr(e: *ast.Expr, writer: anytype, parent_prec: u8) anyerror!void {
             try expr(ix.idx, writer, 0);
             try writer.writeByte(']');
         },
+        .map_lit => |entries| {
+            try writer.writeAll("peta{");
+            for (entries, 0..) |en, i| {
+                if (i > 0) try writer.writeAll(", ");
+                try expr(en.key, writer, 0);
+                try writer.writeAll(": ");
+                try expr(en.value, writer, 0);
+            }
+            try writer.writeByte('}');
+        },
     }
 }

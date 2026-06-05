@@ -64,6 +64,9 @@ pub const list = [_]Spec{
     .{ .name = "hmacSha256Raw", .params = &.{ .teks, .teks }, .ret = .teks },
     .{ .name = "pbkdf2", .params = &.{ .teks, .teks, .bulat }, .ret = .teks },
     .{ .name = "bacaFloat", .params = &.{ .teks, .bulat, .bulat }, .ret = .teks },
+    .{ .name = "petaPunya", .params = &.{ .peta, .teks }, .ret = .bool },
+    .{ .name = "petaKunci", .params = &.{.peta}, .ret = teks_array },
+    .{ .name = "petaHapus", .params = &.{ .peta, .teks }, .ret = .kosong },
 };
 
 pub const layani_id = 9;

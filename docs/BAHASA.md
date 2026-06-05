@@ -120,6 +120,28 @@ cetak(angka);             // [5, 99, 15, 20]
 - Indeks dimulai dari 0 dan harus bertipe `bulat`.
 - Elemen dapat diubah dengan `larik[indeks] = nilai;` (tipe nilai harus sama dengan tipe elemen).
 - Akses atau penugasan di luar batas menimbulkan kesalahan runtime.
+
+## Peta (map) [JALAN]
+
+Peta adalah kumpulan pasangan kunci-nilai berbasis teks (`teks` -> `teks`). Tipe ditulis `peta`. Literal memakai awalan `peta` diikuti kurung kurawal.
+
+```tenun
+biar u: peta = peta{ "nama": "taqin", "peran": "admin" };
+cetak(u["nama"]);         // baca nilai: taqin
+u["peran"] = "pengguna";  // ubah/tambah nilai
+u["email"] = "a@x.id";    // kunci baru
+cetak(u["telepon"]);      // kunci tidak ada -> "" (teks kosong)
+
+cetak(petaPunya(u, "email"));   // benar
+petaHapus(u, "email");
+biar kunci: []teks = petaKunci(u);   // semua kunci sebagai []teks
+```
+
+- Kunci dan nilai keduanya `teks`. Membaca kunci yang tidak ada mengembalikan `""`.
+- Peta kosong: `peta{}`. Tambah nilai dengan `m["k"] = "v";`.
+- Cocok untuk baris hasil DB, objek JSON sederhana, dan definisi model ORM (hasil wire DB sudah berupa teks).
+- Builtin: `petaPunya(m, k): bool`, `petaKunci(m): []teks`, `petaHapus(m, k): kosong`.
+- Belum didukung pada `tenun build` (native) — pakai `tenun run`.
 - Semua elemen literal harus bertipe sama; tipe elemen disimpulkan dari elemen pertama.
 - Larik bisa bersarang: `[][]bulat`.
 
@@ -190,6 +212,9 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 |---|---|---|
 | `cetak(x)` | menampilkan nilai ke output (diakhiri baris baru) | `[JALAN]` |
 | `panjang(larik): bulat` | jumlah elemen larik | `[JALAN]` |
+| `petaPunya(m: peta, k: teks): bool` | apakah kunci ada di peta | `[JALAN]` |
+| `petaKunci(m: peta): []teks` | semua kunci peta | `[JALAN]` |
+| `petaHapus(m: peta, k: teks): kosong` | hapus kunci dari peta | `[JALAN]` |
 | `panjangTeks(teks): bulat` | panjang teks (jumlah byte) | `[JALAN]` |
 | `potong(teks, mulai: bulat, jumlah: bulat): teks` | substring | `[JALAN]` |
 | `akar(desimal): desimal` | akar kuadrat | `[JALAN]` |

@@ -236,15 +236,28 @@ const Sema = struct {
                 return .{ .array = el };
             },
             .index => |ix| {
-                const it = try self.checkExpr(ix.idx);
-                if (it) |t| if (!t.eql(.bulat)) try self.report(expr.pos, "indeks larik harus bertipe bulat");
                 const tt = try self.checkExpr(ix.target);
                 if (tt == null) return null;
+                const it = try self.checkExpr(ix.idx);
+                if (std.meta.activeTag(tt.?) == .peta) {
+                    if (it) |t| if (!t.eql(.teks)) try self.report(expr.pos, "kunci peta harus bertipe teks");
+                    return .teks;
+                }
                 if (std.meta.activeTag(tt.?) != .array) {
-                    try self.report(expr.pos, "hanya larik yang bisa diindeks");
+                    try self.report(expr.pos, "hanya larik atau peta yang bisa diindeks");
                     return null;
                 }
+                if (it) |t| if (!t.eql(.bulat)) try self.report(expr.pos, "indeks larik harus bertipe bulat");
                 return tt.?.array.*;
+            },
+            .map_lit => |entries| {
+                for (entries) |e| {
+                    const kt = try self.checkExpr(e.key);
+                    if (kt) |t| if (!t.eql(.teks)) try self.report(expr.pos, "kunci peta harus bertipe teks");
+                    const vt = try self.checkExpr(e.value);
+                    if (vt) |t| if (!t.eql(.teks)) try self.report(expr.pos, "nilai peta harus bertipe teks");
+                }
+                return .peta;
             },
         }
     }

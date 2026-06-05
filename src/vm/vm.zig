@@ -17,6 +17,7 @@ pub const Value = union(enum) {
     bool: bool,
     kosong,
     array: []Value,
+    peta: *std.StringHashMap([]const u8),
 };
 
 pub const OpCode = enum(u8) {
@@ -50,6 +51,7 @@ pub const OpCode = enum(u8) {
     ret,
     print,
     array_make,
+    map_make,
     index_get,
     index_set,
     array_len,
@@ -394,6 +396,14 @@ const Compiler = struct {
                 try c.emitOp(.array_make);
                 try c.emitU16(@intCast(elems.len));
             },
+            .map_lit => |entries| {
+                for (entries) |en| {
+                    try self.expr(en.key);
+                    try self.expr(en.value);
+                }
+                try c.emitOp(.map_make);
+                try c.emitU16(@intCast(entries.len));
+            },
             .index => |ix| {
                 try self.expr(ix.target);
                 try self.expr(ix.idx);
@@ -587,19 +597,47 @@ const VM = struct {
                     }
                     self.push(.{ .array = arr });
                 },
+                .map_make => {
+                    const n = readU16(code, &frame.ip);
+                    const a = self.vals.allocator();
+                    const m = try a.create(std.StringHashMap([]const u8));
+                    m.* = std.StringHashMap([]const u8).init(a);
+                    // entri di stack: key,value berpasangan; isi mundur lalu tukar
+                    var pairs = try a.alloc(Value, n * 2);
+                    var k: usize = n * 2;
+                    while (k > 0) {
+                        k -= 1;
+                        pairs[k] = self.pop();
+                    }
+                    var j: usize = 0;
+                    while (j < n) : (j += 1) {
+                        try m.put(try a.dupe(u8, pairs[j * 2].teks), try a.dupe(u8, pairs[j * 2 + 1].teks));
+                    }
+                    self.push(.{ .peta = m });
+                },
                 .index_get => {
                     const idx = self.pop();
                     const target = self.pop();
-                    if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
-                    self.push(target.array[@intCast(idx.bulat)]);
+                    if (std.meta.activeTag(target) == .peta) {
+                        self.push(.{ .teks = target.peta.get(idx.teks) orelse "" });
+                    } else {
+                        if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
+                        self.push(target.array[@intCast(idx.bulat)]);
+                    }
                 },
                 .index_set => {
                     const value = self.pop();
                     const idx = self.pop();
                     const target = self.pop();
-                    if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
-                    target.array[@intCast(idx.bulat)] = value;
-                    self.push(value);
+                    if (std.meta.activeTag(target) == .peta) {
+                        const a = self.vals.allocator();
+                        try target.peta.put(try a.dupe(u8, idx.teks), try a.dupe(u8, value.teks));
+                        self.push(value);
+                    } else {
+                        if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
+                        target.array[@intCast(idx.bulat)] = value;
+                        self.push(value);
+                    }
                 },
                 .array_len => {
                     const v = self.pop();
@@ -818,6 +856,19 @@ const VM = struct {
             50 => .{ .teks = crypto.hmacSha256Raw(a, args[0].teks, args[1].teks) catch return self.rt("gagal hmac raw") },
             51 => .{ .teks = crypto.pbkdf2Sha256(a, args[0].teks, args[1].teks, args[2].bulat) catch return self.rt("gagal pbkdf2") },
             52 => .{ .teks = binmod.bacaFloat(a, args[0].teks, args[1].bulat, args[2].bulat) catch return self.rt("gagal bacaFloat") },
+            53 => .{ .bool = args[0].peta.contains(args[1].teks) },
+            54 => blk: {
+                const m = args[0].peta;
+                const arr = a.alloc(Value, m.count()) catch return self.rt("kehabisan memori");
+                var it = m.keyIterator();
+                var i: usize = 0;
+                while (it.next()) |k| : (i += 1) arr[i] = .{ .teks = k.* };
+                break :blk Value{ .array = arr };
+            },
+            55 => blk: {
+                _ = args[0].peta.remove(args[1].teks);
+                break :blk Value.kosong;
+            },
             else => unreachable,
         };
     }
@@ -909,6 +960,17 @@ const VM = struct {
                 }
                 try self.out.writeByte(']');
             },
+            .peta => |m| {
+                try self.out.writeByte('{');
+                var it = m.iterator();
+                var first = true;
+                while (it.next()) |e| {
+                    if (!first) try self.out.writeAll(", ");
+                    first = false;
+                    try self.out.print("\"{s}\": \"{s}\"", .{ e.key_ptr.*, e.value_ptr.* });
+                }
+                try self.out.writeByte('}');
+            },
         }
     }
 
@@ -959,6 +1021,7 @@ fn valueEql(a: Value, b: Value) bool {
             for (a.array, b.array) |x, y| if (!valueEql(x, y)) break :blk false;
             break :blk true;
         },
+        .peta => a.peta == b.peta,
     };
 }
 

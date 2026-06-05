@@ -11,6 +11,7 @@ pub const Type = union(enum) {
     teks,
     bool,
     kosong,
+    peta, // map teks -> teks
     array: *const Type,
 
     pub fn eql(a: Type, b: Type) bool {
@@ -35,6 +36,7 @@ pub const Type = union(enum) {
             .teks => try writer.writeAll("teks"),
             .bool => try writer.writeAll("bool"),
             .kosong => try writer.writeAll("kosong"),
+            .peta => try writer.writeAll("peta"),
             .array => |el| {
                 try writer.writeAll("[]");
                 try el.writeName(writer);
@@ -105,6 +107,7 @@ pub const Expr = struct {
         assign: Assign,
         array: []*Expr,
         index: Index,
+        map_lit: []MapEntry,
     };
 
     pub const Unary = struct { op: UnaryOp, operand: *Expr };
@@ -112,6 +115,7 @@ pub const Expr = struct {
     pub const Call = struct { callee: *Expr, args: []*Expr };
     pub const Assign = struct { target: *Expr, value: *Expr };
     pub const Index = struct { target: *Expr, idx: *Expr };
+    pub const MapEntry = struct { key: *Expr, value: *Expr };
 };
 
 pub const Param = struct {
@@ -305,6 +309,17 @@ fn dumpExpr(expr: *Expr, writer: anytype) anyerror!void {
             try dumpExpr(ix.target, writer);
             try writer.writeByte(' ');
             try dumpExpr(ix.idx, writer);
+            try writer.writeByte(')');
+        },
+        .map_lit => |entries| {
+            try writer.writeAll("(peta");
+            for (entries) |e| {
+                try writer.writeAll(" (");
+                try dumpExpr(e.key, writer);
+                try writer.writeByte(' ');
+                try dumpExpr(e.value, writer);
+                try writer.writeByte(')');
+            }
             try writer.writeByte(')');
         },
     }

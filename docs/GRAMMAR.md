@@ -13,7 +13,7 @@ varDecl     = ("biar" | "tetap") IDENT (":" tipe)? "=" ekspresi ";" ;
 fungsiDecl  = "fungsi" IDENT "(" params? ")" ":" tipe blok ;
 params      = param ("," param)* ;
 param       = IDENT ":" tipe ;
-tipe        = "[" "]" tipe | "bulat" | "desimal" | "teks" | "bool" | "kosong" ;
+tipe        = "[" "]" tipe | "bulat" | "desimal" | "teks" | "bool" | "peta" | "kosong" ;
 
 statement   = exprStmt | ifStmt | whileStmt | forStmt | returnStmt | blok ;
 exprStmt    = ekspresi ";" ;
@@ -36,8 +36,10 @@ unary       = ("!" | "-") unary | call ;
 call        = primary ("(" args? ")" | "[" ekspresi "]")* ;
 args        = ekspresi ("," ekspresi)* ;
 primary     = NUMBER | STRING | "benar" | "salah" | "kosong"
-            | larik | IDENT | "(" ekspresi ")" ;
+            | larik | peta | IDENT | "(" ekspresi ")" ;
 larik       = "[" (ekspresi ("," ekspresi)*)? "]" ;
+peta        = "peta" "{" (entri ("," entri)*)? "}" ;
+entri       = ekspresi ":" ekspresi ;
 ```
 
 ## Token (terminal)
@@ -52,5 +54,5 @@ komentar = "//" sampai akhir baris (diabaikan) ;
 
 ## Belum di grammar (direncanakan)
 
-- tipe komposit lain: map, struct
+- tipe komposit lain: struct
 - langkah (step) kustom pada `untuk`

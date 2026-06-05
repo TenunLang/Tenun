@@ -170,6 +170,7 @@ const Parser = struct {
             .ty_desimal => .desimal,
             .ty_teks => .teks,
             .ty_bool => .bool,
+            .ty_peta => .peta,
             .kw_kosong => .kosong,
             else => null,
         };
@@ -177,7 +178,7 @@ const Parser = struct {
             _ = self.advance();
             return found;
         }
-        try self.errorHere("tipe tidak valid (harap bulat/desimal/teks/bool/kosong atau []T)");
+        try self.errorHere("tipe tidak valid (harap bulat/desimal/teks/bool/peta/kosong atau []T)");
         return Error.ParseError;
     }
 
@@ -338,6 +339,23 @@ const Parser = struct {
                 }
                 _ = try self.expect(.rbracket, "harap ']' menutup larik");
                 return self.newExpr(posOf(t), .{ .array = try elems.toOwnedSlice() });
+            },
+            .ty_peta => {
+                // literal peta: peta{ "kunci": nilai, ... }
+                _ = self.advance();
+                _ = try self.expect(.lbrace, "harap '{' setelah 'peta'");
+                var entries = std.ArrayList(ast.Expr.MapEntry).init(self.arena);
+                if (!self.check(.rbrace)) {
+                    while (true) {
+                        const key = try self.expression();
+                        _ = try self.expect(.colon, "harap ':' antara kunci dan nilai peta");
+                        const value = try self.expression();
+                        try entries.append(.{ .key = key, .value = value });
+                        if (!self.match(.comma)) break;
+                    }
+                }
+                _ = try self.expect(.rbrace, "harap '}' menutup literal peta");
+                return self.newExpr(posOf(t), .{ .map_lit = try entries.toOwnedSlice() });
             },
             else => {
                 try self.errorHere("ekspresi tidak valid");

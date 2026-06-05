@@ -17,6 +17,7 @@ pub const Value = union(enum) {
     bool: bool,
     kosong,
     array: []Value,
+    peta: *std.StringHashMap([]const u8),
 };
 
 const Scope = std.StringHashMap(Value);
@@ -165,12 +166,17 @@ pub const Interpreter = struct {
                 switch (a.target.data) {
                     .ident => |name| _ = self.set(name, v),
                     .index => |ix| {
-                        const arr_v = try self.eval(ix.target);
+                        const tgt = try self.eval(ix.target);
                         const idx = try self.eval(ix.idx);
-                        if (idx.bulat < 0 or idx.bulat >= arr_v.array.len) {
-                            return self.runtimeError(ix.target.pos, "indeks larik di luar batas");
+                        if (std.meta.activeTag(tgt) == .peta) {
+                            const al = self.vals.allocator();
+                            try tgt.peta.put(try al.dupe(u8, idx.teks), try al.dupe(u8, v.teks));
+                        } else {
+                            if (idx.bulat < 0 or idx.bulat >= tgt.array.len) {
+                                return self.runtimeError(ix.target.pos, "indeks larik di luar batas");
+                            }
+                            tgt.array[@intCast(idx.bulat)] = v;
                         }
-                        arr_v.array[@intCast(idx.bulat)] = v;
                     },
                     else => {},
                 }
@@ -181,9 +187,23 @@ pub const Interpreter = struct {
                 for (elems, 0..) |e, i| arr[i] = try self.eval(e);
                 return .{ .array = arr };
             },
+            .map_lit => |entries| {
+                const a = self.vals.allocator();
+                const m = try a.create(std.StringHashMap([]const u8));
+                m.* = std.StringHashMap([]const u8).init(a);
+                for (entries) |e| {
+                    const k = try self.eval(e.key);
+                    const val = try self.eval(e.value);
+                    try m.put(try a.dupe(u8, k.teks), try a.dupe(u8, val.teks));
+                }
+                return .{ .peta = m };
+            },
             .index => |ix| {
                 const target = try self.eval(ix.target);
                 const idx = try self.eval(ix.idx);
+                if (std.meta.activeTag(target) == .peta) {
+                    return .{ .teks = target.peta.get(idx.teks) orelse "" };
+                }
                 if (idx.bulat < 0 or idx.bulat >= target.array.len) {
                     return self.runtimeError(ix.target.pos, "indeks larik di luar batas");
                 }
@@ -482,6 +502,19 @@ pub const Interpreter = struct {
             50 => .{ .teks = crypto.hmacSha256Raw(a, args[0].teks, args[1].teks) catch return self.runtimeError(pos, "gagal hmac raw") },
             51 => .{ .teks = crypto.pbkdf2Sha256(a, args[0].teks, args[1].teks, args[2].bulat) catch return self.runtimeError(pos, "gagal pbkdf2") },
             52 => .{ .teks = binary.bacaFloat(a, args[0].teks, args[1].bulat, args[2].bulat) catch return self.runtimeError(pos, "gagal bacaFloat") },
+            53 => .{ .bool = args[0].peta.contains(args[1].teks) },
+            54 => blk: {
+                const m = args[0].peta;
+                const arr = a.alloc(Value, m.count()) catch return self.runtimeError(pos, "kehabisan memori");
+                var it = m.keyIterator();
+                var i: usize = 0;
+                while (it.next()) |k| : (i += 1) arr[i] = .{ .teks = k.* };
+                break :blk .{ .array = arr };
+            },
+            55 => blk: {
+                _ = args[0].peta.remove(args[1].teks);
+                break :blk .kosong;
+            },
             else => unreachable,
         };
     }
@@ -500,6 +533,17 @@ pub const Interpreter = struct {
                     try self.printValue(el);
                 }
                 try self.out.writeByte(']');
+            },
+            .peta => |m| {
+                try self.out.writeByte('{');
+                var it = m.iterator();
+                var first = true;
+                while (it.next()) |e| {
+                    if (!first) try self.out.writeAll(", ");
+                    first = false;
+                    try self.out.print("\"{s}\": \"{s}\"", .{ e.key_ptr.*, e.value_ptr.* });
+                }
+                try self.out.writeByte('}');
             },
         }
     }
@@ -558,6 +602,7 @@ fn valueEql(a: Value, b: Value) bool {
             }
             break :blk true;
         },
+        .peta => a.peta == b.peta,
     };
 }
 

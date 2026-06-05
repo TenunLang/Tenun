@@ -243,7 +243,7 @@ const Codegen = struct {
                     .desimal => "printf(\"%g\", ((double*)_a.data)[_i]);",
                     .bool => "printf(\"%s\", (((int*)_a.data)[_i]) ? \"benar\" : \"salah\");",
                     .teks => "printf(\"%s\", ((const char**)_a.data)[_i]);",
-                    .array, .kosong => return self.unsupported(arg.pos, "cetak larik bersarang belum didukung di codegen native (pakai VM)"),
+                    .array, .kosong, .peta => return self.unsupported(arg.pos, "cetak larik bersarang/peta belum didukung di codegen native (pakai VM)"),
                 };
                 try self.w("{ TenunArr _a = ");
                 try self.expr(arg);
@@ -385,6 +385,7 @@ const Codegen = struct {
                 try self.expr(ix.idx);
                 try self.w("]");
             },
+            .map_lit => return self.unsupported(e.pos, "tipe peta belum didukung di codegen native (pakai 'tenun run' / VM)"),
         }
     }
 
@@ -422,8 +423,9 @@ const Codegen = struct {
             },
             .index => |ix| blk: {
                 const tt = try self.typeOf(ix.target);
-                break :blk if (std.meta.activeTag(tt) == .array) tt.array.* else .kosong;
+                break :blk if (std.meta.activeTag(tt) == .array) tt.array.* else if (std.meta.activeTag(tt) == .peta) .teks else .kosong;
             },
+            .map_lit => .peta,
         };
     }
 
@@ -463,6 +465,7 @@ fn cType(t: Type) ![]const u8 {
         .bool => "int",
         .kosong => "void",
         .array => "TenunArr",
+        .peta => error.Unsupported,
     };
 }
 

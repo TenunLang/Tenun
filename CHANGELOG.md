@@ -2,6 +2,13 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Tipe `peta` (map teks->teks)
+
+- Tipe baru `peta`: map berkunci teks bernilai teks (statis penuh). Literal `peta{ "k": "v", ... }` (kosong `peta{}`). Baca `m["k"]` (kunci hilang -> `""`). Tulis `m["k"] = "v"`.
+- Builtin baru: `petaPunya(m, k): bool` (53), `petaKunci(m): []teks` (54), `petaHapus(m, k): kosong` (55). Total builtin id 0-55.
+- Pipeline penuh: token `peta`, AST `map_lit` + Type.peta, parser, sema (kunci/nilai wajib teks), interp + VM (Value.peta = *StringHashMap, opcode `map_make`, index_get/set dispatch peta vs larik), fmt. Codegen native: `peta` -> unsupported (pakai VM), konsisten dgn JSON/builtin runtime.
+- Dasar untuk definisi model ORM + baris DB sebagai peta (hasil wire DB sudah teks).
+
 ## 2026-06-05 — Optimasi VM: variabel global pakai slot array
 
 - Variabel global di-resolve ke indeks slot saat kompilasi (bukan lookup `StringHashMap` per akses). `define_global`/`get_global`/`set_global` sekarang operand = slot index langsung; VM simpan `global_slots: []Value`.
