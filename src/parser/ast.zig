@@ -12,9 +12,13 @@ pub const Type = union(enum) {
     bool,
     kosong,
     peta, // map teks -> teks
+    fungsi, // nilai fungsi (first-class)
+    dinamis, // tipe apa saja (hasil panggilan tak langsung)
     array: *const Type,
 
     pub fn eql(a: Type, b: Type) bool {
+        // dinamis kompatibel dengan tipe apa pun (escape hatch dinamis).
+        if (std.meta.activeTag(a) == .dinamis or std.meta.activeTag(b) == .dinamis) return true;
         if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
         return switch (a) {
             .array => a.array.eql(b.array.*),
@@ -37,6 +41,8 @@ pub const Type = union(enum) {
             .bool => try writer.writeAll("bool"),
             .kosong => try writer.writeAll("kosong"),
             .peta => try writer.writeAll("peta"),
+            .fungsi => try writer.writeAll("fungsi"),
+            .dinamis => try writer.writeAll("dinamis"),
             .array => |el| {
                 try writer.writeAll("[]");
                 try el.writeName(writer);

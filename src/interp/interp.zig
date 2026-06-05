@@ -19,6 +19,7 @@ pub const Value = union(enum) {
     kosong,
     array: []Value,
     peta: *std.StringHashMap([]const u8),
+    fungsi: *ast.Stmt, // deklarasi fungsi (first-class)
 };
 
 const Scope = std.StringHashMap(Value);
@@ -148,7 +149,11 @@ pub const Interpreter = struct {
             .string => |s| return .{ .teks = s },
             .boolean => |b| return .{ .bool = b },
             .nil => return .kosong,
-            .ident => |name| return self.get(name).?,
+            .ident => |name| {
+                if (self.get(name)) |v| return v;
+                if (self.functions.get(name)) |stmt| return .{ .fungsi = stmt };
+                return self.runtimeError(expr.pos, "nama tidak dikenal");
+            },
             .unary => |u| {
                 const v = try self.eval(u.operand);
                 return switch (u.op) {
@@ -264,31 +269,40 @@ pub const Interpreter = struct {
     }
 
     fn evalCall(self: *Interpreter, c: ast.Expr.Call) Error!Value {
-        const name = c.callee.data.ident;
-
-        if (std.mem.eql(u8, name, "cetak")) {
-            const v = try self.eval(c.args[0]);
-            try self.printValue(v);
-            try self.out.writeByte('\n');
-            return .kosong;
+        if (std.meta.activeTag(c.callee.data) == .ident) {
+            const name = c.callee.data.ident;
+            // Jalur khusus hanya bila nama bukan variabel (tak ter-shadow).
+            if (self.get(name) == null) {
+                if (std.mem.eql(u8, name, "cetak")) {
+                    const v = try self.eval(c.args[0]);
+                    try self.printValue(v);
+                    try self.out.writeByte('\n');
+                    return .kosong;
+                }
+                if (std.mem.eql(u8, name, "panjang")) {
+                    const v = try self.eval(c.args[0]);
+                    return .{ .bulat = @intCast(v.array.len) };
+                }
+                if (spec.indexOf(name)) |id| {
+                    var argbuf: [8]Value = undefined;
+                    for (c.args, 0..) |a, i| argbuf[i] = try self.eval(a);
+                    return self.callBuiltin(id, argbuf[0..c.args.len], c.callee.pos);
+                }
+                if (self.functions.get(name)) |fn_stmt| {
+                    var av = try self.allocator.alloc(Value, c.args.len);
+                    defer self.allocator.free(av);
+                    for (c.args, 0..) |arg, i| av[i] = try self.eval(arg);
+                    return self.invokeUser(fn_stmt, av);
+                }
+            }
         }
-
-        if (std.mem.eql(u8, name, "panjang")) {
-            const v = try self.eval(c.args[0]);
-            return .{ .bulat = @intCast(v.array.len) };
-        }
-
-        if (spec.indexOf(name)) |id| {
-            var argbuf: [8]Value = undefined;
-            for (c.args, 0..) |a, i| argbuf[i] = try self.eval(a);
-            return self.callBuiltin(id, argbuf[0..c.args.len], c.callee.pos);
-        }
-
-        const fn_stmt = self.functions.get(name).?;
+        // Panggilan tak langsung: evaluasi callee jadi nilai fungsi.
+        const callee = try self.eval(c.callee);
+        if (std.meta.activeTag(callee) != .fungsi) return self.runtimeError(c.callee.pos, "nilai ini bukan fungsi");
         var arg_values = try self.allocator.alloc(Value, c.args.len);
         defer self.allocator.free(arg_values);
         for (c.args, 0..) |arg, i| arg_values[i] = try self.eval(arg);
-        return self.invokeUser(fn_stmt, arg_values);
+        return self.invokeUser(callee.fungsi, arg_values);
     }
 
     fn invokeUser(self: *Interpreter, fn_stmt: *ast.Stmt, arg_values: []const Value) Error!Value {
@@ -557,6 +571,7 @@ pub const Interpreter = struct {
                 }
                 try self.out.writeByte('}');
             },
+            .fungsi => |stmt| try self.out.print("<fungsi {s}>", .{stmt.data.fungsi_decl.name}),
         }
     }
 
@@ -615,6 +630,7 @@ fn valueEql(a: Value, b: Value) bool {
             break :blk true;
         },
         .peta => a.peta == b.peta,
+        .fungsi => a.fungsi == b.fungsi,
     };
 }
 

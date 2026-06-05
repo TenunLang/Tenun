@@ -142,6 +142,33 @@ biar kunci: []teks = petaKunci(u);   // semua kunci sebagai []teks
 - Cocok untuk baris hasil DB, objek JSON sederhana, dan definisi model ORM (hasil wire DB sudah berupa teks).
 - Builtin: `petaPunya(m, k): bool`, `petaKunci(m): []teks`, `petaHapus(m, k): kosong`.
 - Belum didukung pada `tenun build` (native) — pakai `tenun run`.
+
+## Fungsi sebagai nilai (first-class) [JALAN]
+
+Nama fungsi top-level bisa disimpan ke variabel, dioper sebagai argumen, dan dipanggil tak langsung. Tipenya `fungsi`.
+
+```tenun
+fungsi tambah(a: bulat, b: bulat): bulat { kembali a + b; }
+fungsi kali(a: bulat, b: bulat): bulat { kembali a * b; }
+
+biar op: fungsi = tambah;
+cetak(op(3, 4));               // 7
+op = kali;
+cetak(op(3, 4));               // 12
+
+// higher-order: fungsi menerima fungsi
+fungsi terapkan(f: fungsi, x: bulat, y: bulat): dinamis { kembali f(x, y); }
+cetak(terapkan(tambah, 10, 5));   // 15
+
+// larik fungsi + registrasi dinamis
+biar ops: []fungsi = [tambah, kali];
+ops = dorong(ops, tambah);
+cetak(ops[1](6, 7));           // 42
+```
+
+- Hasil panggilan tak langsung bertipe `dinamis` (kompatibel dengan tipe apa pun).
+- `dorong(larik, item)` bekerja untuk larik tipe apa pun, termasuk `[]fungsi`.
+- Nilai fungsi belum didukung pada `tenun build` (native) — pakai `tenun run`.
 - Semua elemen literal harus bertipe sama; tipe elemen disimpulkan dari elemen pertama.
 - Larik bisa bersarang: `[][]bulat`.
 

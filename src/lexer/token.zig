@@ -24,6 +24,7 @@ pub const TokenKind = enum {
     ty_teks,
     ty_bool,
     ty_peta,
+    ty_dinamis,
 
     plus,
     minus,
@@ -81,6 +82,7 @@ pub const keywords = std.StaticStringMap(TokenKind).initComptime(.{
     .{ "teks", .ty_teks },
     .{ "bool", .ty_bool },
     .{ "peta", .ty_peta },
+    .{ "dinamis", .ty_dinamis },
 });
 
 pub fn lookupKeyword(text: []const u8) ?TokenKind {

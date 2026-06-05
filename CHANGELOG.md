@@ -2,6 +2,14 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — First-class functions (nilai fungsi) + tipe dinamis
+
+- Fungsi jadi nilai: nama fungsi top-level bisa disimpan/dioper. Tipe `fungsi`. `biar op: fungsi = tambah; op(3,4);`.
+- Panggilan tak langsung: `op(args)`, `ops[i](args)`, higher-order `fungsi terapkan(f: fungsi, ...)`. Opcode VM `call_value`; interp via Value.fungsi.
+- Tipe `dinamis` (any): hasil panggilan tak langsung; kompatibel dgn semua tipe (escape hatch). Type.eql memperlakukan dinamis cocok dengan apa pun.
+- `dorong` jadi polimorfik (larik T, T)->larik T (runtime sudah generik; sema di-relax). Memungkinkan `[]fungsi` dinamis (registrasi rute).
+- Codegen native: nilai fungsi/dinamis -> unsupported (pakai VM). Lexer keyword `dinamis`; `fungsi` dipakai juga sebagai nama tipe.
+
 ## 2026-06-05 — HTTP POST + soket TLS (httpKirim, sambungAman/kirimAman/terimaAman/tutupAman)
 
 - `httpKirim(metode, url, header, body): teks` (56) — HTTP umum (POST/PUT/DELETE/PATCH/GET) dengan header + body, TLS otomatis untuk https (via std.http.Client). Header: baris "Nama: Nilai" dipisah `\n`.

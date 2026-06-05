@@ -169,6 +169,8 @@ const Sema = struct {
             .nil => return .kosong,
             .ident => |name| {
                 if (self.lookup(name)) |info| return info.type;
+                // Nama fungsi top-level dipakai sebagai nilai (first-class) -> tipe fungsi.
+                if (self.functions.contains(name)) return .fungsi;
                 try self.report(expr.pos, "nama tidak dikenal");
                 return null;
             },
@@ -268,6 +270,13 @@ const Sema = struct {
         if (lt == null or rt == null) return null;
         const l = lt.?;
         const r = rt.?;
+        // Operand dinamis: lewati pengecekan ketat (dispatch dinamis).
+        if (std.meta.activeTag(l) == .dinamis or std.meta.activeTag(r) == .dinamis) {
+            return switch (b.op) {
+                .lt, .gt, .le, .ge, .eq, .neq, .@"and", .@"or" => .bool,
+                else => .dinamis,
+            };
+        }
         switch (b.op) {
             .add, .sub, .mul, .div, .mod => {
                 if (b.op == .add and std.meta.activeTag(l) == .teks and std.meta.activeTag(r) == .teks) return .teks;
@@ -294,11 +303,43 @@ const Sema = struct {
     }
 
     fn checkCall(self: *Sema, expr: *ast.Expr, c: ast.Expr.Call) anyerror!?Type {
+        // Callee bukan ident (mis. larik[i]() atau peta-akses) -> panggilan tak langsung.
         if (std.meta.activeTag(c.callee.data) != .ident) {
-            try self.report(expr.pos, "hanya fungsi yang bisa dipanggil");
-            return null;
+            const ct = try self.checkExpr(c.callee);
+            if (ct) |t| if (std.meta.activeTag(t) != .fungsi and std.meta.activeTag(t) != .dinamis) {
+                try self.report(expr.pos, "hanya nilai fungsi yang bisa dipanggil");
+                return null;
+            };
+            for (c.args) |arg| _ = try self.checkExpr(arg);
+            return .dinamis;
         }
         const name = c.callee.data.ident;
+
+        // Variabel lokal/global bertipe fungsi dipanggil -> panggilan tak langsung.
+        if (self.lookup(name)) |info| {
+            if (std.meta.activeTag(info.type) == .fungsi or std.meta.activeTag(info.type) == .dinamis) {
+                for (c.args) |arg| _ = try self.checkExpr(arg);
+                return .dinamis;
+            }
+        }
+
+        // dorong polimorfik: (larik T, T) -> larik T (runtime sudah generik).
+        if (std.mem.eql(u8, name, "dorong")) {
+            if (c.args.len != 2) {
+                try self.report(expr.pos, "'dorong' butuh 2 argumen (larik, item)");
+                return null;
+            }
+            const at = try self.checkExpr(c.args[0]);
+            _ = try self.checkExpr(c.args[1]);
+            if (at) |t| {
+                if (std.meta.activeTag(t) != .array) {
+                    try self.report(expr.pos, "'dorong' butuh argumen pertama larik");
+                    return null;
+                }
+                return t;
+            }
+            return null;
+        }
 
         if (std.mem.eql(u8, name, "cetak")) {
             if (c.args.len != 1) {

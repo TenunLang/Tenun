@@ -243,7 +243,7 @@ const Codegen = struct {
                     .desimal => "printf(\"%g\", ((double*)_a.data)[_i]);",
                     .bool => "printf(\"%s\", (((int*)_a.data)[_i]) ? \"benar\" : \"salah\");",
                     .teks => "printf(\"%s\", ((const char**)_a.data)[_i]);",
-                    .array, .kosong, .peta => return self.unsupported(arg.pos, "cetak larik bersarang/peta belum didukung di codegen native (pakai VM)"),
+                    .array, .kosong, .peta, .fungsi, .dinamis => return self.unsupported(arg.pos, "cetak larik tipe ini belum didukung di codegen native (pakai VM)"),
                 };
                 try self.w("{ TenunArr _a = ");
                 try self.expr(arg);
@@ -305,6 +305,9 @@ const Codegen = struct {
                 try self.w(")");
             },
             .call => |c| {
+                if (std.meta.activeTag(c.callee.data) != .ident) {
+                    return self.unsupported(e.pos, "panggilan fungsi tak langsung (first-class) butuh runtime — pakai 'tenun run' (VM)");
+                }
                 const name = c.callee.data.ident;
                 if (std.mem.eql(u8, name, "panjang")) {
                     try self.w("(");
@@ -408,6 +411,7 @@ const Codegen = struct {
                 else => self.typeOf(b.left),
             },
             .call => |c| blk: {
+                if (std.meta.activeTag(c.callee.data) != .ident) break :blk .dinamis;
                 const name = c.callee.data.ident;
                 if (std.mem.eql(u8, name, "panjang")) break :blk .bulat;
                 if (spec.indexOf(name)) |id| break :blk spec.list[id].ret;
@@ -466,6 +470,8 @@ fn cType(t: Type) ![]const u8 {
         .kosong => "void",
         .array => "TenunArr",
         .peta => error.Unsupported,
+        .fungsi => error.Unsupported,
+        .dinamis => error.Unsupported,
     };
 }
 

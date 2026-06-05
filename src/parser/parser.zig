@@ -171,6 +171,8 @@ const Parser = struct {
             .ty_teks => .teks,
             .ty_bool => .bool,
             .ty_peta => .peta,
+            .ty_dinamis => .dinamis,
+            .kw_fungsi => .fungsi,
             .kw_kosong => .kosong,
             else => null,
         };
@@ -178,7 +180,7 @@ const Parser = struct {
             _ = self.advance();
             return found;
         }
-        try self.errorHere("tipe tidak valid (harap bulat/desimal/teks/bool/peta/kosong atau []T)");
+        try self.errorHere("tipe tidak valid (harap bulat/desimal/teks/bool/peta/fungsi/dinamis/kosong atau []T)");
         return Error.ParseError;
     }
 

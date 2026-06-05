@@ -19,6 +19,7 @@ pub const Value = union(enum) {
     kosong,
     array: []Value,
     peta: *std.StringHashMap([]const u8),
+    fungsi: usize, // indeks ke functions (first-class)
 };
 
 pub const OpCode = enum(u8) {
@@ -49,6 +50,7 @@ pub const OpCode = enum(u8) {
     jump_if_false,
     loop,
     call,
+    call_value,
     ret,
     print,
     array_make,
@@ -298,6 +300,11 @@ const Compiler = struct {
             .ident => |name| {
                 if (self.resolveLocal(name)) |slot| {
                     try self.emitGetLocal(slot);
+                } else if (self.fn_index.get(name)) |fidx| {
+                    // Nama fungsi sebagai nilai (first-class).
+                    const i = try c.addConst(.{ .fungsi = fidx });
+                    try c.emitOp(.constant);
+                    try c.emitU16(i);
                 } else {
                     const slot = try self.globalSlot(name);
                     try c.emitOp(.get_global);
@@ -345,29 +352,41 @@ const Compiler = struct {
                 });
             },
             .call => |call| {
-                const name = call.callee.data.ident;
-                if (std.mem.eql(u8, name, "cetak")) {
-                    try self.expr(call.args[0]);
-                    try c.emitOp(.print);
-                    try c.emitOp(.kosong_);
-                    return;
+                if (std.meta.activeTag(call.callee.data) == .ident) {
+                    const name = call.callee.data.ident;
+                    // Hanya jalur khusus bila nama BUKAN variabel lokal (tak ter-shadow).
+                    if (self.resolveLocal(name) == null) {
+                        if (std.mem.eql(u8, name, "cetak")) {
+                            try self.expr(call.args[0]);
+                            try c.emitOp(.print);
+                            try c.emitOp(.kosong_);
+                            return;
+                        }
+                        if (std.mem.eql(u8, name, "panjang")) {
+                            try self.expr(call.args[0]);
+                            try c.emitOp(.array_len);
+                            return;
+                        }
+                        if (spec.indexOf(name)) |id| {
+                            for (call.args) |a| try self.expr(a);
+                            try c.emitOp(.builtin);
+                            try c.emit(@intCast(id));
+                            try c.emit(@intCast(call.args.len));
+                            return;
+                        }
+                        if (self.fn_index.get(name)) |idx| {
+                            for (call.args) |a| try self.expr(a);
+                            try c.emitOp(.call);
+                            try c.emit(@intCast(idx));
+                            try c.emit(@intCast(call.args.len));
+                            return;
+                        }
+                    }
                 }
-                if (std.mem.eql(u8, name, "panjang")) {
-                    try self.expr(call.args[0]);
-                    try c.emitOp(.array_len);
-                    return;
-                }
-                if (spec.indexOf(name)) |id| {
-                    for (call.args) |a| try self.expr(a);
-                    try c.emitOp(.builtin);
-                    try c.emit(@intCast(id));
-                    try c.emit(@intCast(call.args.len));
-                    return;
-                }
-                const idx = self.fn_index.get(name).?;
+                // Panggilan tak langsung: nilai fungsi dari variabel/indeks/ekspresi.
                 for (call.args) |a| try self.expr(a);
-                try c.emitOp(.call);
-                try c.emit(@intCast(idx));
+                try self.expr(call.callee);
+                try c.emitOp(.call_value);
                 try c.emit(@intCast(call.args.len));
             },
             .assign => |a| {
@@ -663,6 +682,18 @@ const VM = struct {
                     const fidx = code[frame.ip];
                     const argc = code[frame.ip + 1];
                     frame.ip += 2;
+                    const base = self.top - argc;
+                    try self.frames.append(.{ .func = &self.functions[fidx], .ip = 0, .base = base });
+                    frame = &self.frames.items[self.frames.items.len - 1];
+                    code = frame.func.chunk.code.items;
+                },
+                .call_value => {
+                    const argc = code[frame.ip];
+                    frame.ip += 1;
+                    const callee = self.pop();
+                    if (std.meta.activeTag(callee) != .fungsi) return self.rt("nilai ini bukan fungsi");
+                    const fidx = callee.fungsi;
+                    if (self.functions[fidx].arity != argc) return self.rt("jumlah argumen tidak sesuai");
                     const base = self.top - argc;
                     try self.frames.append(.{ .func = &self.functions[fidx], .ip = 0, .base = base });
                     frame = &self.frames.items[self.frames.items.len - 1];
@@ -983,6 +1014,7 @@ const VM = struct {
                 }
                 try self.out.writeByte('}');
             },
+            .fungsi => |fi| try self.out.print("<fungsi {s}>", .{self.functions[fi].name}),
         }
     }
 
@@ -1034,6 +1066,7 @@ fn valueEql(a: Value, b: Value) bool {
             break :blk true;
         },
         .peta => a.peta == b.peta,
+        .fungsi => a.fungsi == b.fungsi,
     };
 }
 
