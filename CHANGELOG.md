@@ -2,6 +2,12 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Tooling: tenun fmt + repl, builtin bacaFloat
+
+- `tenun fmt <file>` — formatter kanonik (indentasi 4 spasi, kurawal K&R, precedence-aware: paren minimal). `--stdout`/`--cek` untuk cetak tanpa tulis. Implementasi `src/fmt/fmt.zig` (pretty-print AST).
+- `tenun repl` — mode interaktif; deklarasi (`fungsi`/`biar`/`tetap`) persist antar baris.
+- Builtin id 52 `bacaFloat(data, offset, lebar): teks` — decode IEEE-754 LE (4=single, 8=double). Dipakai modul-mysql untuk FLOAT/DOUBLE biner.
+
 ## 2026-06-05 — Builtin kripto raw + pbkdf2 + dorong (SELESAI)
 
 - Builtin id 48 `dorong(larik []teks, item teks): []teks` (push). id 49 `sha256Raw`, 50 `hmacSha256Raw`, 51 `pbkdf2` (PBKDF2-HMAC-SHA256) — byte mentah, untuk protokol/SCRAM. Total builtin id 0-51.

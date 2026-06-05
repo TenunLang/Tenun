@@ -6,6 +6,7 @@ const sema = @import("sema/sema.zig");
 const Interpreter = @import("interp/interp.zig").Interpreter;
 const vm = @import("vm/vm.zig");
 const codegen = @import("codegen/codegen.zig");
+const fmt = @import("fmt/fmt.zig");
 
 pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool) !void {
     const source = try loadProgram(allocator, path);
@@ -133,6 +134,125 @@ pub fn build(allocator: std.mem.Allocator, path: []const u8, keep_c: bool) !void
     if (!keep_c) std.fs.cwd().deleteFile(c_path) catch {};
 
     try stdout.print("[tenun] build sukses: {s}\n", .{exe_path});
+}
+
+// Format file .tenun ke bentuk kanonik. write=true menulis kembali ke file,
+// selain itu cetak ke stdout. Tidak meng-expand impor (format satu file saja).
+pub fn fmtFile(allocator: std.mem.Allocator, path: []const u8, write: bool) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+
+    const source = try readFile(allocator, path);
+    defer allocator.free(source);
+
+    var diags = Diagnostics.init(allocator);
+    defer diags.deinit();
+
+    var lexer = Lexer.init(source, &diags);
+    const tokens = try lexer.tokenize(allocator);
+    defer allocator.free(tokens);
+    if (diags.hasErrors()) {
+        try diags.print(stderr);
+        return;
+    }
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const program = parser.parse(arena.allocator(), tokens, &diags) catch {
+        try diags.print(stderr);
+        return;
+    };
+
+    var buf = std.ArrayList(u8).init(allocator);
+    defer buf.deinit();
+    try fmt.format(program, buf.writer());
+
+    if (write) {
+        if (std.mem.eql(u8, buf.items, source)) {
+            try stdout.print("[tenun fmt] {s} sudah rapi\n", .{path});
+            return;
+        }
+        const f = try std.fs.cwd().createFile(path, .{});
+        defer f.close();
+        try f.writeAll(buf.items);
+        try stdout.print("[tenun fmt] {s} dirapikan\n", .{path});
+    } else {
+        try stdout.writeAll(buf.items);
+    }
+}
+
+// REPL: baca baris, jalankan via interpreter, simpan deklarasi antar baris.
+pub fn repl(allocator: std.mem.Allocator) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+    const stdin = std.io.getStdIn().reader();
+
+    try stdout.writeAll("Tenun REPL. Ketik kode, baris kosong untuk jalankan, 'keluar' untuk berhenti.\n");
+
+    // akumulasi deklarasi (fungsi + biar) supaya tetap ada antar eval
+    var prelude = std.ArrayList(u8).init(allocator);
+    defer prelude.deinit();
+
+    var line_buf = std.ArrayList(u8).init(allocator);
+    defer line_buf.deinit();
+
+    while (true) {
+        try stdout.writeAll("tenun> ");
+        line_buf.clearRetainingCapacity();
+        stdin.streamUntilDelimiter(line_buf.writer(), '\n', null) catch break;
+        const line = std.mem.trim(u8, line_buf.items, " \t\r");
+        if (line.len == 0) continue;
+        if (std.mem.eql(u8, line, "keluar") or std.mem.eql(u8, line, "exit")) break;
+
+        // gabung prelude + baris ini, jalankan; kalau deklarasi, simpan ke prelude
+        const is_decl = std.mem.startsWith(u8, line, "fungsi ") or
+            std.mem.startsWith(u8, line, "biar ") or
+            std.mem.startsWith(u8, line, "tetap ");
+
+        const full = try std.fmt.allocPrint(allocator, "{s}{s}\n", .{ prelude.items, line });
+        defer allocator.free(full);
+
+        const ok = evalSnippet(allocator, full, stdout, stderr);
+        if (ok and is_decl) {
+            try prelude.appendSlice(line);
+            try prelude.append('\n');
+        }
+    }
+    try stdout.writeAll("dadah.\n");
+}
+
+fn evalSnippet(allocator: std.mem.Allocator, source: []const u8, stdout: anytype, stderr: anytype) bool {
+    var diags = Diagnostics.init(allocator);
+    defer diags.deinit();
+
+    var lexer = Lexer.init(source, &diags);
+    const tokens = lexer.tokenize(allocator) catch return false;
+    defer allocator.free(tokens);
+    if (diags.hasErrors()) {
+        diags.print(stderr) catch {};
+        return false;
+    }
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const program = parser.parse(arena.allocator(), tokens, &diags) catch {
+        diags.print(stderr) catch {};
+        return false;
+    };
+
+    sema.check(allocator, program, &diags) catch {};
+    if (diags.hasErrors()) {
+        diags.print(stderr) catch {};
+        return false;
+    }
+
+    var interp = Interpreter.init(allocator, &diags, stdout.any());
+    defer interp.deinit();
+    interp.run(program) catch {
+        diags.print(stderr) catch {};
+        return false;
+    };
+    return true;
 }
 
 pub fn add(allocator: std.mem.Allocator, arg: []const u8) anyerror!void {

@@ -43,6 +43,19 @@ pub fn main() !void {
         } else {
             try stderr.print("error: 'tenun run' membutuhkan path file\n", .{});
         }
+    } else if (std.mem.eql(u8, cmd, "fmt")) {
+        var path: ?[]const u8 = null;
+        var write = true;
+        for (args[2..]) |arg| {
+            if (std.mem.eql(u8, arg, "--cek") or std.mem.eql(u8, arg, "--stdout")) write = false else path = arg;
+        }
+        if (path) |p| {
+            try driver.fmtFile(allocator, p, write);
+        } else {
+            try stderr.print("error: 'tenun fmt' membutuhkan path file\n", .{});
+        }
+    } else if (std.mem.eql(u8, cmd, "repl")) {
+        try driver.repl(allocator);
     } else if (std.mem.eql(u8, cmd, "build")) {
         var path: ?[]const u8 = null;
         var keep_c = false;
@@ -70,6 +83,9 @@ fn printUsage(writer: anytype) !void {
         \\  tenun run <file> --interp   menjalankan via tree-walking interpreter
         \\  tenun build <file>     kompilasi ke executable native (<file>.exe)
         \\  tenun build <file> --emit-c   simpan juga sumber C perantara
+        \\  tenun fmt <file>       rapikan format kode (tulis ke file)
+        \\  tenun fmt <file> --stdout   cetak hasil rapi ke layar
+        \\  tenun repl             mode interaktif (REPL)
         \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
         \\
         \\Dalam kode, pakai modul dengan: impor "<modul>";
