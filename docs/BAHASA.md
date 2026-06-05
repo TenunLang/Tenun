@@ -87,7 +87,19 @@ biar koneksi: bulat = sambungMysql("localhost", 3306);
 
 `impor "nama";` memuat berkas `tenun_modul/nama/nama.tenun` (atau `tenun_modul/nama.tenun`) dan menjadikan fungsi top-level modul tersedia di program. Modul ditulis dalam bahasa Tenun biasa, memanfaatkan builtin inti (TCP, kripto, encode biner, dll).
 
-Konvensi modul: repo `TenunLang/modul-<nama>` dengan berkas `<nama>.tenun` di root berisi `fungsi`-`fungsi` publik.
+`tenun add` juga mencatat dependensi di `tenun.json` proyek (dibuat otomatis bila belum ada):
+
+```json
+{
+  "nama": "proyek-tenun",
+  "versi": "0.1.0",
+  "butuh": {
+    "mysql": "^0.1.0"
+  }
+}
+```
+
+Setiap modul adalah repo sendiri: `TenunLang/modul-<nama>`, berisi `<nama>.tenun` (sumber) dan `tenun.json` (manifest: nama, versi, deskripsi, lisensi, berkas, kataKunci, butuh).
 
 Catatan: saat ini `impor` menggabungkan fungsi modul ke ruang nama global (panggil langsung namanya). Bentuk bernamespace `tetap m = modul("mysql")` lalu `m.sambung(...)` direncanakan (perlu fungsi sebagai nilai / akses anggota).
 

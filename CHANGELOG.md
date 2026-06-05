@@ -2,6 +2,12 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-05 — Manifest proyek `tenun.json` (SELESAI)
+
+- `tenun add <nama>` kini membuat/memperbarui `tenun.json` proyek (ala package.json): menambah `<nama>` ke `butuh` dengan rentang versi `^<versi-modul>` (versi dibaca dari `tenun_modul/<nama>/tenun.json`). (`driver.tambahKeManifest`, std.json, output rapi indent-2)
+- Konvensi: tiap modul = repo sendiri `TenunLang/modul-<nama>` dengan `<nama>.tenun` + `tenun.json` (nama, versi, deskripsi, lisensi, berkas, kataKunci, butuh).
+- Modul resmi pertama: **`TenunLang/modul-mysql`** (klien MySQL/MariaDB ditulis dengan Tenun). End-to-end terverifikasi: `tenun add mysql` (clone dari GitHub) + `tenun.json` proyek otomatis + `impor "mysql"` + login/`SELECT VERSION()` ke MariaDB lokal.
+
 ## 2026-06-05 — Primitif protokol: sha1Raw, xor, escape `\0` (SELESAI)
 
 Melengkapi bahan untuk menulis klien protokol biner (mis. MySQL) sebagai modul Tenun.

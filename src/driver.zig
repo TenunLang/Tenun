@@ -167,15 +167,84 @@ pub fn add(allocator: std.mem.Allocator, arg: []const u8) !void {
         try stderr.print("error: gagal mengambil modul '{s}'\n", .{name});
         return;
     }
+    tambahKeManifest(allocator, name) catch {};
     try stdout.print("[tenun] modul '{s}' terpasang di {s} — pakai dengan: impor \"{s}\";\n", .{ name, dest, name });
 }
 
+fn tambahKeManifest(allocator: std.mem.Allocator, name: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var root: std.json.Value = .{ .object = std.json.ObjectMap.init(a) };
+    if (readFile(a, "tenun.json")) |data| {
+        if (std.json.parseFromSliceLeaky(std.json.Value, a, data, .{})) |parsed| {
+            if (parsed == .object) root = parsed;
+        } else |_| {}
+    } else |_| {}
+
+    if (root.object.get("nama") == null) try root.object.put("nama", .{ .string = "proyek-tenun" });
+    if (root.object.get("versi") == null) try root.object.put("versi", .{ .string = "0.1.0" });
+
+    // versi modul dari manifest modul
+    var versi: []const u8 = "0.1.0";
+    const mpath = try std.fmt.allocPrint(a, "tenun_modul/{s}/tenun.json", .{name});
+    if (readFile(a, mpath)) |md| {
+        if (std.json.parseFromSliceLeaky(std.json.Value, a, md, .{})) |mr| {
+            if (mr == .object) if (mr.object.get("versi")) |v| if (v == .string) {
+                versi = v.string;
+            };
+        } else |_| {}
+    } else |_| {}
+
+    const vstr = try std.fmt.allocPrint(a, "^{s}", .{versi});
+    if (root.object.getPtr("butuh")) |bp| {
+        if (bp.* == .object) {
+            try bp.object.put(name, .{ .string = vstr });
+        } else {
+            var o = std.json.ObjectMap.init(a);
+            try o.put(name, .{ .string = vstr });
+            try root.object.put("butuh", .{ .object = o });
+        }
+    } else {
+        var o = std.json.ObjectMap.init(a);
+        try o.put(name, .{ .string = vstr });
+        try root.object.put("butuh", .{ .object = o });
+    }
+
+    var buf = std.ArrayList(u8).init(a);
+    try std.json.stringify(root, .{ .whitespace = .indent_2 }, buf.writer());
+    try buf.append('\n');
+    const f = try std.fs.cwd().createFile("tenun.json", .{});
+    defer f.close();
+    try f.writeAll(buf.items);
+}
+
 fn loadModule(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
+    // 1) entry dari manifest tenun.json ("berkas")
+    {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const mpath = try std.fmt.allocPrint(a, "tenun_modul/{s}/tenun.json", .{name});
+        if (readFile(a, mpath)) |data| {
+            if (std.json.parseFromSliceLeaky(std.json.Value, a, data, .{})) |root| {
+                if (root == .object) if (root.object.get("berkas")) |b| if (b == .string) {
+                    const fp = try std.fmt.allocPrint(a, "tenun_modul/{s}/{s}", .{ name, b.string });
+                    if (std.fs.cwd().access(fp, .{})) {
+                        return readFile(allocator, fp);
+                    } else |_| {}
+                };
+            } else |_| {}
+        } else |_| {}
+    }
+    // 2) fallback: tenun_modul/<nama>/<nama>.tenun
     const p1 = try std.fmt.allocPrint(allocator, "tenun_modul/{s}/{s}.tenun", .{ name, name });
     defer allocator.free(p1);
     if (std.fs.cwd().access(p1, .{})) {
         return readFile(allocator, p1);
     } else |_| {}
+    // 3) fallback: tenun_modul/<nama>.tenun
     const p2 = try std.fmt.allocPrint(allocator, "tenun_modul/{s}.tenun", .{name});
     defer allocator.free(p2);
     return readFile(allocator, p2);
