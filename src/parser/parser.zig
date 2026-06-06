@@ -80,6 +80,7 @@ const Parser = struct {
         if (self.check(.kw_untuk)) return self.forStmt();
         if (self.check(.kw_kembali)) return self.returnStmt();
         if (self.check(.kw_coba)) return self.tryStmt();
+        if (self.check(.kw_cocok)) return self.matchStmt();
         if (self.check(.kw_henti)) {
             const kw = self.advance();
             _ = try self.expect(.semicolon, "harap ';' setelah henti");
@@ -147,6 +148,29 @@ const Parser = struct {
             .var_name = name.lexeme,
             .iter = start,
             .body = body,
+        } });
+    }
+
+    fn matchStmt(self: *Parser) Error!*ast.Stmt {
+        const kw = self.advance();
+        const subject = try self.expression();
+        _ = try self.expect(.lbrace, "harap '{' setelah ekspresi 'cocok'");
+        var arms = std.ArrayList(ast.Stmt.MatchArm).init(self.arena);
+        var default: ?[]*ast.Stmt = null;
+        while (!self.check(.rbrace) and !self.check(.eof)) {
+            if (self.match(.kw_lain)) {
+                default = try self.block();
+                break;
+            }
+            const value = try self.expression();
+            const body = try self.block();
+            try arms.append(.{ .value = value, .body = body });
+        }
+        _ = try self.expect(.rbrace, "harap '}' menutup 'cocok'");
+        return self.newStmt(posOf(kw), .{ .match_stmt = .{
+            .subject = subject,
+            .arms = try arms.toOwnedSlice(),
+            .default = default,
         } });
     }
 

@@ -378,6 +378,27 @@ const Compiler = struct {
                     try lc.cont_jumps.append(j);
                 }
             },
+            .match_stmt => |d| {
+                self.beginScope();
+                try self.expr(d.subject);
+                const slot = self.declareLocal("$cocok");
+                var endJumps = std.ArrayList(usize).init(self.allocator);
+                defer endJumps.deinit();
+                for (d.arms) |arm| {
+                    try self.emitGetLocal(slot);
+                    try self.expr(arm.value);
+                    try c.emitOp(.eq);
+                    const nextJ = try self.emitJump(.jump_if_false);
+                    try c.emitOp(.pop);
+                    try self.block(arm.body);
+                    try endJumps.append(try self.emitJump(.jump));
+                    try self.patchJump(nextJ);
+                    try c.emitOp(.pop);
+                }
+                if (d.default) |def| try self.block(def);
+                for (endJumps.items) |ej| try self.patchJump(ej);
+                try self.endScope();
+            },
             .try_stmt => |d| {
                 try c.emitOp(.coba_mulai);
                 const hpos = c.code.items.len;

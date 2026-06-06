@@ -1,2 +1,2 @@
-biar isi: teks = ambil("https://example.com");
+biar isi: teks = ambil("https://google.com");
 cetak(isi);

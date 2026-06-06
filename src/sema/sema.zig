@@ -167,6 +167,15 @@ const Sema = struct {
                 try self.checkBlock(d.body, ret);
                 self.loop_depth -= 1;
             },
+            .match_stmt => |d| {
+                const st = try self.checkExpr(d.subject);
+                for (d.arms) |arm| {
+                    const vt = try self.checkExpr(arm.value);
+                    if (st) |s| if (vt) |v| if (!v.eql(s)) try self.report(stmt.pos, "nilai arm 'cocok' harus bertipe sama dengan subjek");
+                    try self.checkBlock(arm.body, ret);
+                }
+                if (d.default) |def| try self.checkBlock(def, ret);
+            },
             .try_stmt => |d| {
                 try self.checkBlock(d.body, ret);
                 try self.pushScope();

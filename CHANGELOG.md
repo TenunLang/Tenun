@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — cocok (switch)
+
+- `cocok x { nilai { } lain { } }` — pencocokan nilai (==), tanpa fall-through, `lain` default. Statement match_stmt, VM via rantai jump, interp valueEql. Codegen unsupported.
+
 ## 2026-06-06 — coba/tangkap (error handling)
 
 - `coba { } tangkap (e) { }` menangkap galat runtime (div nol, indeks luar batas, gagal builtin). `e: teks` = pesan. Unwind lintas frame, bisa bersarang.

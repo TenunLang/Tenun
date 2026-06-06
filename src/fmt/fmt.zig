@@ -120,6 +120,26 @@ fn stmt(s: *ast.Stmt, writer: anytype, level: usize) anyerror!void {
             try writer.print(" tangkap ({s}) ", .{d.err_name});
             try block(d.handler, writer, level);
         },
+        .match_stmt => |d| {
+            try writer.writeAll("cocok ");
+            try expr(d.subject, writer, 0);
+            try writer.writeAll(" {\n");
+            for (d.arms) |arm| {
+                try indent(writer, level + 1);
+                try expr(arm.value, writer, 0);
+                try writer.writeByte(' ');
+                try block(arm.body, writer, level + 1);
+                try writer.writeByte('\n');
+            }
+            if (d.default) |def| {
+                try indent(writer, level + 1);
+                try writer.writeAll("lain ");
+                try block(def, writer, level + 1);
+                try writer.writeByte('\n');
+            }
+            try indent(writer, level);
+            try writer.writeByte('}');
+        },
         .block => |stmts| try block(stmts, writer, level),
     }
 }

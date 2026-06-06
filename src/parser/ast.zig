@@ -155,6 +155,7 @@ pub const Stmt = struct {
         break_stmt,
         continue_stmt,
         try_stmt: Try,
+        match_stmt: Match,
         block: []*Stmt,
     };
 
@@ -162,6 +163,17 @@ pub const Stmt = struct {
         body: []*Stmt,
         err_name: []const u8,
         handler: []*Stmt,
+    };
+
+    pub const MatchArm = struct {
+        value: *Expr,
+        body: []*Stmt,
+    };
+
+    pub const Match = struct {
+        subject: *Expr,
+        arms: []MatchArm,
+        default: ?[]*Stmt,
     };
 
     pub const VarDecl = struct {
@@ -299,6 +311,23 @@ fn dumpStmt(stmt: *Stmt, writer: anytype) anyerror!void {
             try dumpStmts(d.body, writer);
             try writer.print(" tangkap {s} ", .{d.err_name});
             try dumpStmts(d.handler, writer);
+            try writer.writeByte(')');
+        },
+        .match_stmt => |d| {
+            try writer.writeAll("(cocok ");
+            try dumpExpr(d.subject, writer);
+            for (d.arms) |arm| {
+                try writer.writeAll(" (");
+                try dumpExpr(arm.value, writer);
+                try writer.writeByte(' ');
+                try dumpStmts(arm.body, writer);
+                try writer.writeByte(')');
+            }
+            if (d.default) |def| {
+                try writer.writeAll(" (lain ");
+                try dumpStmts(def, writer);
+                try writer.writeByte(')');
+            }
             try writer.writeByte(')');
         },
         .block => |stmts| try dumpStmts(stmts, writer),

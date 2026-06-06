@@ -158,6 +158,21 @@ pub const Interpreter = struct {
             },
             .break_stmt => self.breaking = true,
             .continue_stmt => self.continuing = true,
+            .match_stmt => |d| {
+                const subj = try self.eval(d.subject);
+                var matched = false;
+                for (d.arms) |arm| {
+                    const v = try self.eval(arm.value);
+                    if (valueEql(subj, v)) {
+                        try self.execBlock(arm.body);
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    if (d.default) |def| try self.execBlock(def);
+                }
+            },
             .try_stmt => |d| {
                 self.execBlock(d.body) catch |e| {
                     if (e == error.RuntimeError) {

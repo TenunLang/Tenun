@@ -243,6 +243,18 @@ untuk b dari buah {
 
 `untuk <nama> dari <larik>` (tanpa `sampai`) mengulang tiap elemen; `nama` bertipe sama dengan elemen larik. Bedakan dengan bentuk rentang `untuk i dari A sampai B`.
 
+### cocok (pencocokan nilai / switch) `[JALAN]`
+
+```tenun
+cocok n {
+    1 { cetak("satu"); }
+    2 { cetak("dua"); }
+    lain { cetak("lainnya"); }
+}
+```
+
+Mencocokkan subjek dengan tiap nilai arm (perbandingan `==`); arm pertama yang cocok dijalankan lalu berhenti (tanpa fall-through). `lain` = default (opsional). Subjek & nilai arm harus bertipe sama.
+
 ### coba & tangkap (error handling) `[JALAN]`
 
 Tangkap galat runtime (pembagian nol, indeks di luar batas, gagal builtin/koneksi, dll) supaya program tidak berhenti:
