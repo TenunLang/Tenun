@@ -118,3 +118,19 @@ pub fn tipeKonten(nama: []const u8) []const u8 {
     }
     return "application/octet-stream";
 }
+
+pub fn pangkas(allocator: std.mem.Allocator, s: []const u8) ![]u8 {
+    return allocator.dupe(u8, std.mem.trim(u8, s, " \t\r\n"));
+}
+
+pub fn keBesar(allocator: std.mem.Allocator, s: []const u8) ![]u8 {
+    const buf = try allocator.alloc(u8, s.len);
+    for (s, 0..) |c, i| buf[i] = std.ascii.toUpper(c);
+    return buf;
+}
+
+pub fn keKecil(allocator: std.mem.Allocator, s: []const u8) ![]u8 {
+    const buf = try allocator.alloc(u8, s.len);
+    for (s, 0..) |c, i| buf[i] = std.ascii.toLower(c);
+    return buf;
+}

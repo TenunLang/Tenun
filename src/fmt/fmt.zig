@@ -123,10 +123,14 @@ fn prec(op: ast.BinaryOp) u8 {
     return switch (op) {
         .@"or" => 1,
         .@"and" => 2,
-        .eq, .neq => 3,
-        .lt, .gt, .le, .ge => 4,
-        .add, .sub => 5,
-        .mul, .div, .mod => 6,
+        .bit_or => 3,
+        .bit_xor => 4,
+        .bit_and => 5,
+        .eq, .neq => 6,
+        .lt, .gt, .le, .ge => 7,
+        .shl, .shr => 8,
+        .add, .sub => 9,
+        .mul, .div, .mod => 10,
     };
 }
 

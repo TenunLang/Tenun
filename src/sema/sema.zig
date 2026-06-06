@@ -328,6 +328,11 @@ const Sema = struct {
                 try self.report(expr.pos, "operand '&&' / '||' harus bertipe bool");
                 return null;
             },
+            .bit_and, .bit_or, .bit_xor, .shl, .shr => {
+                if (std.meta.activeTag(l) == .bulat and std.meta.activeTag(r) == .bulat) return .bulat;
+                try self.report(expr.pos, "operand bitwise (& | ^ << >>) harus bertipe bulat");
+                return null;
+            },
         }
     }
 

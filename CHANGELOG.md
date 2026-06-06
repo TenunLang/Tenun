@@ -2,6 +2,13 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — bitwise, hex/biner, komentar blok, penugasan majemuk, builtin waktu/string
+
+- Operator bitwise `& | ^ << >>` (untuk bulat). Precedence ala C.
+- Literal heksadesimal `0xFF` & biner `0b1010`. Komentar blok `/* ... */`.
+- Penugasan majemuk `+= -= *= /= %=` (desugar `x = x op e`).
+- Builtin: `waktu()` (unix timestamp), `acakAngka(min, max)`, `keDesimal(teks)`, `pangkas(teks)` (trim), `keBesar`/`keKecil` (upper/lower ASCII). Total builtin id 0-69.
+
 ## 2026-06-06 — peta jadi teks->dinamis (nilai apa pun, bersarang)
 
 - Nilai `peta` sekarang bisa tipe apa pun (teks, bulat, bool, larik, peta bersarang) — bukan cuma teks. Buka objek JSON bersarang + data campuran. Baca peta -> tipe `dinamis`. Kunci tetap `teks`; kunci hilang -> `""`.

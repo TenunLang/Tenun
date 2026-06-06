@@ -190,9 +190,15 @@ Map dan struct belum tersedia `[RENCANA]`.
 | Aritmatika | `+` `-` `*` `/` `%` |
 | Perbandingan | `==` `!=` `<` `>` `<=` `>=` |
 | Logika | `&&` `\|\|` `!` |
-| Penugasan | `=` |
+| Bitwise (bulat) | `&` `\|` `^` `<<` `>>` |
+| Penugasan | `=` `+=` `-=` `*=` `/=` `%=` |
 
-Urutan precedence dari paling longgar ke paling erat: `=` lalu `||` lalu `&&` lalu `== !=` lalu `< > <= >=` lalu `+ -` lalu `* / %` lalu unary `! -` lalu pemanggilan/grup. Detail lengkap di `GRAMMAR.md`.
+Urutan precedence dari paling longgar ke paling erat: `=` `+=` ... lalu `||` lalu `&&` lalu `|` lalu `^` lalu `&` lalu `== !=` lalu `< > <= >=` lalu `<< >>` lalu `+ -` lalu `* / %` lalu unary `! -` lalu pemanggilan/grup. Detail lengkap di `GRAMMAR.md`.
+
+- Bitwise (`& | ^ << >>`) hanya untuk `bulat`.
+- Penugasan majemuk: `x += e` setara `x = x + e` (juga `-= *= /= %=`).
+- Literal angka: desimal `42`, heksadesimal `0xFF`, biner `0b1010`.
+- Komentar: baris `// ...` dan blok `/* ... */`.
 
 ## 6. Kontrol Alur [JALAN]
 

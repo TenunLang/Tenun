@@ -75,6 +75,12 @@ pub const list = [_]Spec{
     .{ .name = "layaniSoket", .params = &.{.bulat}, .ret = .kosong },
     .{ .name = "siarkan", .params = &.{.teks}, .ret = .kosong },
     .{ .name = "argumen", .params = &.{}, .ret = teks_array },
+    .{ .name = "waktu", .params = &.{}, .ret = .bulat },
+    .{ .name = "acakAngka", .params = &.{ .bulat, .bulat }, .ret = .bulat },
+    .{ .name = "keDesimal", .params = &.{.teks}, .ret = .desimal },
+    .{ .name = "pangkas", .params = &.{.teks}, .ret = .teks },
+    .{ .name = "keBesar", .params = &.{.teks}, .ret = .teks },
+    .{ .name = "keKecil", .params = &.{.teks}, .ret = .teks },
 };
 
 pub const layani_id = 9;

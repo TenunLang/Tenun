@@ -42,6 +42,11 @@ pub const OpCode = enum(u8) {
     gt,
     le,
     ge,
+    bit_and,
+    bit_or,
+    bit_xor,
+    shl,
+    shr,
     pop,
     define_global,
     get_global,
@@ -385,7 +390,7 @@ const Compiler = struct {
                 const v: Value = if (std.mem.indexOfScalar(u8, s, '.') != null)
                     .{ .desimal = std.fmt.parseFloat(f64, s) catch 0 }
                 else
-                    .{ .bulat = std.fmt.parseInt(i64, s, 10) catch 0 };
+                    .{ .bulat = std.fmt.parseInt(i64, s, 0) catch 0 };
                 const i = try c.addConst(v);
                 try c.emitOp(.constant);
                 try c.emitU16(i);
@@ -448,6 +453,11 @@ const Compiler = struct {
                     .gt => .gt,
                     .le => .le,
                     .ge => .ge,
+                    .bit_and => .bit_and,
+                    .bit_or => .bit_or,
+                    .bit_xor => .bit_xor,
+                    .shl => .shl,
+                    .shr => .shr,
                     else => unreachable,
                 });
             },
@@ -665,7 +675,7 @@ const VM = struct {
                     const v = self.pop();
                     self.push(.{ .bool = !v.bool });
                 },
-                .add, .sub, .mul, .div, .mod, .lt, .gt, .le, .ge => try self.binary(op),
+                .add, .sub, .mul, .div, .mod, .lt, .gt, .le, .ge, .bit_and, .bit_or, .bit_xor, .shl, .shr => try self.binary(op),
                 .eq => {
                     const b = self.pop();
                     const a = self.pop();
@@ -841,6 +851,11 @@ const VM = struct {
                 .gt => .{ .bool = x > y },
                 .le => .{ .bool = x <= y },
                 .ge => .{ .bool = x >= y },
+                .bit_and => .{ .bulat = x & y },
+                .bit_or => .{ .bulat = x | y },
+                .bit_xor => .{ .bulat = x ^ y },
+                .shl => .{ .bulat = std.math.shl(i64, x, y) },
+                .shr => .{ .bulat = std.math.shr(i64, x, y) },
                 else => unreachable,
             });
         } else {
@@ -887,6 +902,17 @@ const VM = struct {
                 for (argv.list, 0..) |s, i| arr[i] = .{ .teks = s };
                 break :blk Value{ .array = arr };
             },
+            64 => .{ .bulat = std.time.timestamp() },
+            65 => blk: {
+                const lo = args[0].bulat;
+                const hi = args[1].bulat;
+                if (hi <= lo) break :blk Value{ .bulat = lo };
+                break :blk Value{ .bulat = std.crypto.random.intRangeLessThan(i64, lo, hi) };
+            },
+            66 => .{ .desimal = std.fmt.parseFloat(f64, std.mem.trim(u8, args[0].teks, " \t\r\n")) catch 0 },
+            67 => .{ .teks = text.pangkas(a, args[0].teks) catch return self.rt("gagal pangkas") },
+            68 => .{ .teks = text.keBesar(a, args[0].teks) catch return self.rt("gagal keBesar") },
+            69 => .{ .teks = text.keKecil(a, args[0].teks) catch return self.rt("gagal keKecil") },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk Value.kosong;

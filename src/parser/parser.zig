@@ -218,6 +218,26 @@ const Parser = struct {
             self.diags.report(.err, eq.line, eq.column, "target assignment harus variabel atau elemen larik") catch return Error.OutOfMemory;
             return Error.ParseError;
         }
+        // Penugasan majemuk: x += e  ->  x = x + e
+        const compound: ?ast.BinaryOp = switch (self.peek().kind) {
+            .plus_eq => .add,
+            .minus_eq => .sub,
+            .star_eq => .mul,
+            .slash_eq => .div,
+            .percent_eq => .mod,
+            else => null,
+        };
+        if (compound) |op| {
+            const op_tok = self.advance();
+            const value = try self.assignment();
+            const lt = std.meta.activeTag(left.data);
+            if (lt != .ident and lt != .index) {
+                self.diags.report(.err, op_tok.line, op_tok.column, "target penugasan majemuk harus variabel atau elemen larik") catch return Error.OutOfMemory;
+                return Error.ParseError;
+            }
+            const bin = try self.newExpr(left.pos, .{ .binary = .{ .op = op, .left = left, .right = value } });
+            return self.newExpr(left.pos, .{ .assign = .{ .target = left, .value = bin } });
+        }
         return left;
     }
 
@@ -232,11 +252,41 @@ const Parser = struct {
     }
 
     fn logicAnd(self: *Parser) Error!*ast.Expr {
-        var left = try self.equality();
+        var left = try self.bitOr();
         while (self.check(.and_and)) {
             _ = self.advance();
-            const right = try self.equality();
+            const right = try self.bitOr();
             left = try self.newExpr(left.pos, .{ .binary = .{ .op = .@"and", .left = left, .right = right } });
+        }
+        return left;
+    }
+
+    fn bitOr(self: *Parser) Error!*ast.Expr {
+        var left = try self.bitXor();
+        while (self.check(.pipe)) {
+            _ = self.advance();
+            const right = try self.bitXor();
+            left = try self.newExpr(left.pos, .{ .binary = .{ .op = .bit_or, .left = left, .right = right } });
+        }
+        return left;
+    }
+
+    fn bitXor(self: *Parser) Error!*ast.Expr {
+        var left = try self.bitAnd();
+        while (self.check(.caret)) {
+            _ = self.advance();
+            const right = try self.bitAnd();
+            left = try self.newExpr(left.pos, .{ .binary = .{ .op = .bit_xor, .left = left, .right = right } });
+        }
+        return left;
+    }
+
+    fn bitAnd(self: *Parser) Error!*ast.Expr {
+        var left = try self.equality();
+        while (self.check(.amp)) {
+            _ = self.advance();
+            const right = try self.equality();
+            left = try self.newExpr(left.pos, .{ .binary = .{ .op = .bit_and, .left = left, .right = right } });
         }
         return left;
     }
@@ -252,8 +302,18 @@ const Parser = struct {
     }
 
     fn comparison(self: *Parser) Error!*ast.Expr {
-        var left = try self.term();
+        var left = try self.shift();
         while (self.check(.lt) or self.check(.gt) or self.check(.le) or self.check(.ge)) {
+            const op = self.advance();
+            const right = try self.shift();
+            left = try self.newExpr(left.pos, .{ .binary = .{ .op = mapBinary(op.kind), .left = left, .right = right } });
+        }
+        return left;
+    }
+
+    fn shift(self: *Parser) Error!*ast.Expr {
+        var left = try self.term();
+        while (self.check(.shl) or self.check(.shr)) {
             const op = self.advance();
             const right = try self.term();
             left = try self.newExpr(left.pos, .{ .binary = .{ .op = mapBinary(op.kind), .left = left, .right = right } });
@@ -472,6 +532,11 @@ fn mapBinary(kind: TokenKind) ast.BinaryOp {
         .ge => .ge,
         .and_and => .@"and",
         .or_or => .@"or",
+        .amp => .bit_and,
+        .pipe => .bit_or,
+        .caret => .bit_xor,
+        .shl => .shl,
+        .shr => .shr,
         else => unreachable,
     };
 }

@@ -50,17 +50,18 @@ pub const Lexer = struct {
             ',' => self.make(.comma),
             ':' => self.make(.colon),
             ';' => self.make(.semicolon),
-            '+' => self.make(.plus),
-            '-' => self.make(.minus),
-            '*' => self.make(.star),
-            '/' => self.make(.slash),
-            '%' => self.make(.percent),
+            '+' => self.make(if (self.match('=')) .plus_eq else .plus),
+            '-' => self.make(if (self.match('=')) .minus_eq else .minus),
+            '*' => self.make(if (self.match('=')) .star_eq else .star),
+            '/' => self.make(if (self.match('=')) .slash_eq else .slash),
+            '%' => self.make(if (self.match('=')) .percent_eq else .percent),
             '=' => self.make(if (self.match('=')) .eq else .assign),
             '!' => self.make(if (self.match('=')) .neq else .bang),
-            '<' => self.make(if (self.match('=')) .le else .lt),
-            '>' => self.make(if (self.match('=')) .ge else .gt),
-            '&' => if (self.match('&')) self.make(.and_and) else self.invalidChar("operator '&' tidak valid, maksudnya '&&'?"),
-            '|' => if (self.match('|')) self.make(.or_or) else self.invalidChar("operator '|' tidak valid, maksudnya '||'?"),
+            '<' => self.make(if (self.match('<')) .shl else if (self.match('=')) .le else .lt),
+            '>' => self.make(if (self.match('>')) .shr else if (self.match('=')) .ge else .gt),
+            '&' => self.make(if (self.match('&')) .and_and else .amp),
+            '|' => self.make(if (self.match('|')) .or_or else .pipe),
+            '^' => self.make(.caret),
             '"' => self.string(),
             else => {
                 if (isDigit(c)) return self.number();
@@ -88,6 +89,17 @@ pub const Lexer = struct {
     }
 
     fn number(self: *Lexer) Token {
+        // Heksadesimal 0x.. / biner 0b..
+        if (self.peek() == 'x' or self.peek() == 'X') {
+            _ = self.advance();
+            while (isHex(self.peek())) _ = self.advance();
+            return self.make(.number);
+        }
+        if (self.peek() == 'b' or self.peek() == 'B') {
+            _ = self.advance();
+            while (self.peek() == '0' or self.peek() == '1') _ = self.advance();
+            return self.make(.number);
+        }
         while (isDigit(self.peek())) _ = self.advance();
         if (self.peek() == '.' and isDigit(self.peekNext())) {
             _ = self.advance();
@@ -114,6 +126,14 @@ pub const Lexer = struct {
                 '/' => {
                     if (self.peekNext() == '/') {
                         while (!self.isAtEnd() and self.peek() != '\n') _ = self.advance();
+                    } else if (self.peekNext() == '*') {
+                        _ = self.advance();
+                        _ = self.advance();
+                        while (!self.isAtEnd() and !(self.peek() == '*' and self.peekNext() == '/')) _ = self.advance();
+                        if (!self.isAtEnd()) {
+                            _ = self.advance();
+                            _ = self.advance();
+                        }
                     } else return;
                 },
                 else => return,
@@ -163,6 +183,10 @@ pub const Lexer = struct {
 
 fn isDigit(c: u8) bool {
     return c >= '0' and c <= '9';
+}
+
+fn isHex(c: u8) bool {
+    return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F');
 }
 
 fn isAlpha(c: u8) bool {

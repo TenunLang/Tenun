@@ -179,7 +179,7 @@ pub const Interpreter = struct {
                 if (std.mem.indexOfScalar(u8, s, '.') != null) {
                     return .{ .desimal = std.fmt.parseFloat(f64, s) catch 0 };
                 }
-                return .{ .bulat = std.fmt.parseInt(i64, s, 10) catch 0 };
+                return .{ .bulat = std.fmt.parseInt(i64, s, 0) catch 0 };
             },
             .string => |s| return .{ .teks = s },
             .boolean => |b| return .{ .bool = b },
@@ -283,6 +283,11 @@ pub const Interpreter = struct {
                 .gt => .{ .bool = x > y },
                 .le => .{ .bool = x <= y },
                 .ge => .{ .bool = x >= y },
+                .bit_and => .{ .bulat = x & y },
+                .bit_or => .{ .bulat = x | y },
+                .bit_xor => .{ .bulat = x ^ y },
+                .shl => .{ .bulat = std.math.shl(i64, x, y) },
+                .shr => .{ .bulat = std.math.shr(i64, x, y) },
                 else => unreachable,
             };
         } else {
@@ -469,6 +474,17 @@ pub const Interpreter = struct {
                 for (argv.list, 0..) |s, i| arr[i] = .{ .teks = s };
                 break :blk .{ .array = arr };
             },
+            64 => .{ .bulat = std.time.timestamp() },
+            65 => blk: {
+                const lo = args[0].bulat;
+                const hi = args[1].bulat;
+                if (hi <= lo) break :blk .{ .bulat = lo };
+                break :blk .{ .bulat = std.crypto.random.intRangeLessThan(i64, lo, hi) };
+            },
+            66 => .{ .desimal = std.fmt.parseFloat(f64, std.mem.trim(u8, args[0].teks, " \t\r\n")) catch 0 },
+            67 => .{ .teks = text.pangkas(a, args[0].teks) catch return self.runtimeError(pos, "gagal pangkas") },
+            68 => .{ .teks = text.keBesar(a, args[0].teks) catch return self.runtimeError(pos, "gagal keBesar") },
+            69 => .{ .teks = text.keKecil(a, args[0].teks) catch return self.runtimeError(pos, "gagal keKecil") },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk .kosong;

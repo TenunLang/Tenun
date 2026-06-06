@@ -65,6 +65,11 @@ pub const BinaryOp = enum {
     ge,
     @"and",
     @"or",
+    bit_and,
+    bit_or,
+    bit_xor,
+    shl,
+    shr,
 
     pub fn symbol(self: BinaryOp) []const u8 {
         return switch (self) {
@@ -81,6 +86,11 @@ pub const BinaryOp = enum {
             .ge => ">=",
             .@"and" => "&&",
             .@"or" => "||",
+            .bit_and => "&",
+            .bit_or => "|",
+            .bit_xor => "^",
+            .shl => "<<",
+            .shr => ">>",
         };
     }
 };

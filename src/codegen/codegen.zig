@@ -493,6 +493,11 @@ fn cBinOp(op: ast.BinaryOp) []const u8 {
         .ge => " >= ",
         .@"and" => " && ",
         .@"or" => " || ",
+        .bit_and => " & ",
+        .bit_or => " | ",
+        .bit_xor => " ^ ",
+        .shl => " << ",
+        .shr => " >> ",
     };
 }
 
