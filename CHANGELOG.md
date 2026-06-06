@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — CLI `tenun baru` (scaffold proyek web MVC)
+
+- `tenun baru <nama>`: buat proyek web MVC siap pakai (kerangka Jala) — `app.tenun`, `routes.tenun`, `app/{config,controllers,models}`, `views/*.batik` + `partials/`, `public/`. Mirip `laravel new`. Implementasi di driver.zig (baru) + main.zig. Folder/berkas bernama teknis (English), kode Indonesia.
+
 ## 2026-06-06 — builtin decode PNG (bacaGambar)
 
 - `bacaGambar(path)` (94): decode PNG 8-bit (grayscale/RGB/RGBA/palette) via std.compress.zlib + unfilter -> teks "lebar tinggi g0 g1 ..." grayscale 0-255 (builtins/gambar.zig). Total builtin id 0-94. Dasar `modul-citra` (citra_png) + OCR dari gambar PNG asli.

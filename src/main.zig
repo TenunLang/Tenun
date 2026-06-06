@@ -37,6 +37,12 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
         } else {
             try driver.add(allocator, args[1]);
         }
+    } else if (std.mem.eql(u8, cmd, "baru")) {
+        if (args.len < 2) {
+            try stderr.print("error: 'tenun baru' membutuhkan nama proyek (mis. 'tenun baru blog')\n", .{});
+        } else {
+            try driver.baru(allocator, args[1]);
+        }
     } else if (std.mem.eql(u8, cmd, "run")) {
         var path: ?[]const u8 = null;
         var use_vm = true;
@@ -118,6 +124,7 @@ fn printUsage(writer: anytype) !void {
         \\  tenun fmt <file> --stdout   cetak hasil rapi ke layar
         \\  tenun repl             mode interaktif (REPL)
         \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
+        \\  tenun baru <nama>      buat proyek web MVC baru (kerangka Jala)
         \\
         \\Dalam kode, pakai modul dengan: impor "<modul>";
         \\
