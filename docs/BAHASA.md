@@ -137,9 +137,18 @@ petaHapus(u, "email");
 biar kunci: []teks = petaKunci(u);   // semua kunci sebagai []teks
 ```
 
-- Kunci dan nilai keduanya `teks`. Membaca kunci yang tidak ada mengembalikan `""`.
-- Peta kosong: `peta{}`. Tambah nilai dengan `m["k"] = "v";`.
-- Cocok untuk baris hasil DB, objek JSON sederhana, dan definisi model ORM (hasil wire DB sudah berupa teks).
+- Kunci `teks`. **Nilai bisa tipe apa pun** (teks, bulat, bool, larik, bahkan `peta` lain — bisa bersarang). Hasil baca bertipe `dinamis` (cocok dengan tipe apa pun).
+- Membaca kunci yang tidak ada mengembalikan `""` (teks kosong).
+- Peta kosong: `peta{}`. Tambah/ubah nilai dengan `m["k"] = nilai;`.
+- Cocok untuk objek JSON (termasuk bersarang), baris hasil DB, dan definisi model ORM.
+
+```tenun
+biar u: peta = peta{ "nama": "Taqin", "umur": 30, "aktif": benar };
+biar data: peta = peta{ "tags": ["web", "tenun"], "alamat": peta{ "kota": "Solo" } };
+biar tags: []teks = data["tags"];        // nilai larik
+biar al: peta = data["alamat"];          // peta bersarang
+cetak(al["kota"]);                        // Solo
+```
 - Builtin: `petaPunya(m, k): bool`, `petaKunci(m): []teks`, `petaHapus(m, k): kosong`.
 - Belum didukung pada `tenun build` (native) — pakai `tenun run`.
 

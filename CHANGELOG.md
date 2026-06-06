@@ -2,6 +2,11 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — peta jadi teks->dinamis (nilai apa pun, bersarang)
+
+- Nilai `peta` sekarang bisa tipe apa pun (teks, bulat, bool, larik, peta bersarang) — bukan cuma teks. Buka objek JSON bersarang + data campuran. Baca peta -> tipe `dinamis`. Kunci tetap `teks`; kunci hilang -> `""`.
+- Value.peta jadi `*StringHashMap(Value)` (interp+VM). map_make/index simpan/baca Value. printValue rekursif. Sema: map_lit nilai bebas, index peta -> dinamis. Kompatibel mundur dgn kode teks->teks.
+
 ## 2026-06-06 — for-each larik
 
 - `untuk x dari <larik> { }` — iterasi tiap elemen larik (tanpa `sampai`). Bentuk rentang `untuk i dari A sampai B` tetap ada. AST `foreach_stmt`. VM desugar ke loop indeks (dukung henti/lanjut). Codegen native: unsupported (pakai VM).

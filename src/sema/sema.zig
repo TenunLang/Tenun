@@ -273,7 +273,7 @@ const Sema = struct {
                 const it = try self.checkExpr(ix.idx);
                 if (std.meta.activeTag(tt.?) == .peta) {
                     if (it) |t| if (!t.eql(.teks)) try self.report(expr.pos, "kunci peta harus bertipe teks");
-                    return .teks;
+                    return .dinamis; // nilai peta bisa tipe apa pun
                 }
                 if (std.meta.activeTag(tt.?) != .array) {
                     try self.report(expr.pos, "hanya larik atau peta yang bisa diindeks");
@@ -286,8 +286,7 @@ const Sema = struct {
                 for (entries) |e| {
                     const kt = try self.checkExpr(e.key);
                     if (kt) |t| if (!t.eql(.teks)) try self.report(expr.pos, "kunci peta harus bertipe teks");
-                    const vt = try self.checkExpr(e.value);
-                    if (vt) |t| if (!t.eql(.teks)) try self.report(expr.pos, "nilai peta harus bertipe teks");
+                    _ = try self.checkExpr(e.value); // nilai bisa tipe apa pun
                 }
                 return .peta;
             },

@@ -20,7 +20,7 @@ pub const Value = union(enum) {
     bool: bool,
     kosong,
     array: []Value,
-    peta: *std.StringHashMap([]const u8),
+    peta: *std.StringHashMap(Value), // map teks -> nilai apa pun (dinamis)
     fungsi: *ast.Stmt, // deklarasi fungsi (first-class)
 };
 
@@ -211,7 +211,7 @@ pub const Interpreter = struct {
                         const idx = try self.eval(ix.idx);
                         if (std.meta.activeTag(tgt) == .peta) {
                             const al = self.vals.allocator();
-                            try tgt.peta.put(try al.dupe(u8, idx.teks), try al.dupe(u8, v.teks));
+                            try tgt.peta.put(try al.dupe(u8, idx.teks), v);
                         } else {
                             if (idx.bulat < 0 or idx.bulat >= tgt.array.len) {
                                 return self.runtimeError(ix.target.pos, "indeks larik di luar batas");
@@ -230,12 +230,12 @@ pub const Interpreter = struct {
             },
             .map_lit => |entries| {
                 const a = self.vals.allocator();
-                const m = try a.create(std.StringHashMap([]const u8));
-                m.* = std.StringHashMap([]const u8).init(a);
+                const m = try a.create(std.StringHashMap(Value));
+                m.* = std.StringHashMap(Value).init(a);
                 for (entries) |e| {
                     const k = try self.eval(e.key);
                     const val = try self.eval(e.value);
-                    try m.put(try a.dupe(u8, k.teks), try a.dupe(u8, val.teks));
+                    try m.put(try a.dupe(u8, k.teks), val);
                 }
                 return .{ .peta = m };
             },
@@ -243,7 +243,7 @@ pub const Interpreter = struct {
                 const target = try self.eval(ix.target);
                 const idx = try self.eval(ix.idx);
                 if (std.meta.activeTag(target) == .peta) {
-                    return .{ .teks = target.peta.get(idx.teks) orelse "" };
+                    return target.peta.get(idx.teks) orelse .{ .teks = "" };
                 }
                 if (idx.bulat < 0 or idx.bulat >= target.array.len) {
                     return self.runtimeError(ix.target.pos, "indeks larik di luar batas");
@@ -638,7 +638,8 @@ pub const Interpreter = struct {
                 while (it.next()) |e| {
                     if (!first) try self.out.writeAll(", ");
                     first = false;
-                    try self.out.print("\"{s}\": \"{s}\"", .{ e.key_ptr.*, e.value_ptr.* });
+                    try self.out.print("\"{s}\": ", .{e.key_ptr.*});
+                    try self.printValue(e.value_ptr.*);
                 }
                 try self.out.writeByte('}');
             },

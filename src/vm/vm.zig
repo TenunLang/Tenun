@@ -20,7 +20,7 @@ pub const Value = union(enum) {
     bool: bool,
     kosong,
     array: []Value,
-    peta: *std.StringHashMap([]const u8),
+    peta: *std.StringHashMap(Value), // map teks -> nilai apa pun (dinamis)
     fungsi: usize, // indeks ke functions (first-class)
 };
 
@@ -728,8 +728,8 @@ const VM = struct {
                 .map_make => {
                     const n = readU16(code, &frame.ip);
                     const a = self.vals.allocator();
-                    const m = try a.create(std.StringHashMap([]const u8));
-                    m.* = std.StringHashMap([]const u8).init(a);
+                    const m = try a.create(std.StringHashMap(Value));
+                    m.* = std.StringHashMap(Value).init(a);
                     // entri di stack: key,value berpasangan; isi mundur lalu tukar
                     var pairs = try a.alloc(Value, n * 2);
                     var k: usize = n * 2;
@@ -739,7 +739,7 @@ const VM = struct {
                     }
                     var j: usize = 0;
                     while (j < n) : (j += 1) {
-                        try m.put(try a.dupe(u8, pairs[j * 2].teks), try a.dupe(u8, pairs[j * 2 + 1].teks));
+                        try m.put(try a.dupe(u8, pairs[j * 2].teks), pairs[j * 2 + 1]);
                     }
                     self.push(.{ .peta = m });
                 },
@@ -747,7 +747,7 @@ const VM = struct {
                     const idx = self.pop();
                     const target = self.pop();
                     if (std.meta.activeTag(target) == .peta) {
-                        self.push(.{ .teks = target.peta.get(idx.teks) orelse "" });
+                        self.push(target.peta.get(idx.teks) orelse .{ .teks = "" });
                     } else {
                         if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
                         self.push(target.array[@intCast(idx.bulat)]);
@@ -759,7 +759,7 @@ const VM = struct {
                     const target = self.pop();
                     if (std.meta.activeTag(target) == .peta) {
                         const a = self.vals.allocator();
-                        try target.peta.put(try a.dupe(u8, idx.teks), try a.dupe(u8, value.teks));
+                        try target.peta.put(try a.dupe(u8, idx.teks), value);
                         self.push(value);
                     } else {
                         if (idx.bulat < 0 or idx.bulat >= target.array.len) return self.rt("indeks larik di luar batas");
@@ -1159,7 +1159,8 @@ const VM = struct {
                 while (it.next()) |e| {
                     if (!first) try self.out.writeAll(", ");
                     first = false;
-                    try self.out.print("\"{s}\": \"{s}\"", .{ e.key_ptr.*, e.value_ptr.* });
+                    try self.out.print("\"{s}\": ", .{e.key_ptr.*});
+                    try self.printValue(e.value_ptr.*);
                 }
                 try self.out.writeByte('}');
             },
