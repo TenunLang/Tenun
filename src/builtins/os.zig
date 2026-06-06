@@ -20,7 +20,7 @@ pub fn info(a: std.mem.Allocator, kunci: []const u8) ![]u8 {
         if (builtin.os.tag == .windows) {
             return envGet(a, "COMPUTERNAME");
         } else {
-            var buf: [256]u8 = undefined;
+            var buf: [std.posix.HOST_NAME_MAX]u8 = undefined;
             const h = std.posix.gethostname(&buf) catch return envGet(a, "HOSTNAME");
             return a.dupe(u8, h);
         }
