@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — tanggal + zona waktu
+
+- `tanggal(ts, offsetJam): teks` (70) -> "YYYY-MM-DD HH:MM:SS" pada offset zona waktu (jam). `waktuMili()` (71) ms. builtins/waktu.zig (civil-from-days). Total builtin id 0-71.
+
 ## 2026-06-06 — ++ / --
 
 - `x++` / `x--` (increment/decrement) untuk variabel & elemen larik (desugar `x = x + 1`).

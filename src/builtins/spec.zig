@@ -81,6 +81,8 @@ pub const list = [_]Spec{
     .{ .name = "pangkas", .params = &.{.teks}, .ret = .teks },
     .{ .name = "keBesar", .params = &.{.teks}, .ret = .teks },
     .{ .name = "keKecil", .params = &.{.teks}, .ret = .teks },
+    .{ .name = "tanggal", .params = &.{ .bulat, .bulat }, .ret = .teks },
+    .{ .name = "waktuMili", .params = &.{}, .ret = .bulat },
 };
 
 pub const layani_id = 9;

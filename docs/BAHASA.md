@@ -315,6 +315,10 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `petaPunya(m: peta, k: teks): bool` | apakah kunci ada di peta | `[JALAN]` |
 | `petaKunci(m: peta): []teks` | semua kunci peta | `[JALAN]` |
 | `petaHapus(m: peta, k: teks): kosong` | hapus kunci dari peta | `[JALAN]` |
+| `waktu(): bulat` / `waktuMili(): bulat` | unix timestamp (detik / ms) | `[JALAN]` |
+| `tanggal(ts: bulat, offsetJam: bulat): teks` | "YYYY-MM-DD HH:MM:SS" pada zona waktu | `[JALAN]` |
+| `acakAngka(min: bulat, max: bulat): bulat` | bilangan acak [min,max) | `[JALAN]` |
+| `pangkas`/`keBesar`/`keKecil`/`keDesimal` | util teks | `[JALAN]` |
 | `httpKirim(metode, url, header, body: teks): teks` | HTTP request (TLS auto utk https) | `[JALAN]` |
 | `sambungAman(inang: teks, port: bulat): bulat` | sambung soket TLS, kembalikan handle | `[JALAN]` |
 | `kirimAman(soket: bulat, data: teks): kosong` | kirim lewat soket TLS | `[JALAN]` |

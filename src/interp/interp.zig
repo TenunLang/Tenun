@@ -12,6 +12,7 @@ const binary = @import("../builtins/binary.zig");
 const tls = @import("../builtins/tls.zig");
 const siar = @import("../builtins/siar.zig");
 const argv = @import("../builtins/argv.zig");
+const waktu = @import("../builtins/waktu.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -514,6 +515,8 @@ pub const Interpreter = struct {
             67 => .{ .teks = text.pangkas(a, args[0].teks) catch return self.runtimeError(pos, "gagal pangkas") },
             68 => .{ .teks = text.keBesar(a, args[0].teks) catch return self.runtimeError(pos, "gagal keBesar") },
             69 => .{ .teks = text.keKecil(a, args[0].teks) catch return self.runtimeError(pos, "gagal keKecil") },
+            70 => .{ .teks = waktu.tanggal(a, args[0].bulat, args[1].bulat) catch return self.runtimeError(pos, "gagal tanggal") },
+            71 => .{ .bulat = std.time.milliTimestamp() },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk .kosong;
