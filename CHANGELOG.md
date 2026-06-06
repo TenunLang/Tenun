@@ -2,10 +2,13 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
-## 2026-06-06 — CLI `tenun baru` + generator `buat:` (scaffold proyek web MVC)
+## 2026-06-06 — `tenun <file>` langsung + default index.tenun
 
-- `tenun baru <nama>`: buat proyek web MVC siap pakai (kerangka Jala) — `app.tenun`, `routes.tenun`, `app/{config,controllers,models}`, `views/*.batik` + `partials/`, `public/`. Mirip `laravel new`.
-- `tenun buat:controller|model|view <nama>`: generator berkas dalam proyek (mirip `php artisan make:`). Implementasi di driver.zig (baru, buatBerkas) + main.zig. Folder/berkas bernama teknis (English), kode Indonesia.
+- `tenun <file.tenun> [arg...]` menjalankan berkas tanpa subperintah `run` (argumen tetap lewat `argumen()`). `tenun` tanpa argumen menjalankan `index.tenun` bila ada. `run` lama tetap jalan (kompatibel). Dasar DX kerangka Jala (`tenun` = start server, `tenun nakhoda.tenun ...` = generator).
+
+## 2026-06-06 — scaffold/generator pindah ke modul (compiler tetap ramping)
+
+- Sempat ada `tenun baru`/`tenun buat:` di compiler; DIBATALKAN dari inti. Scaffolding bukan urusan compiler. Sekarang jadi program Tenun di modul Jala (`cli/jala.tenun`), pakai builtin berkas (buatDir/tulisFile/argumen). Pakai: `tenun run tenun_modul/jala/cli/jala.tenun baru <nama>`; generator via `tenun jalan controller|model|view <nama>` (skrip di tenun.json proyek).
 
 ## 2026-06-06 — builtin decode PNG (bacaGambar)
 

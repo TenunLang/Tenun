@@ -23,8 +23,13 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
+    // Tanpa argumen: jalankan index.tenun bila ada, selain itu tampilkan bantuan.
     if (args.len < 1) {
-        try printUsage(stdout);
+        if (std.fs.cwd().access("index.tenun", .{})) {
+            try driver.run(allocator, "index.tenun", true, &.{});
+        } else |_| {
+            try printUsage(stdout);
+        }
         return;
     }
 
@@ -36,19 +41,6 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
             try stderr.print("error: 'tenun add' membutuhkan nama modul (mis. 'tenun add mysql')\n", .{});
         } else {
             try driver.add(allocator, args[1]);
-        }
-    } else if (std.mem.eql(u8, cmd, "baru")) {
-        if (args.len < 2) {
-            try stderr.print("error: 'tenun baru' membutuhkan nama proyek (mis. 'tenun baru blog')\n", .{});
-        } else {
-            try driver.baru(allocator, args[1]);
-        }
-    } else if (std.mem.startsWith(u8, cmd, "buat:")) {
-        const jenis = cmd["buat:".len..];
-        if (args.len < 2) {
-            try stderr.print("error: 'tenun buat:{s}' membutuhkan nama (mis. 'tenun buat:{s} home')\n", .{ jenis, jenis });
-        } else {
-            try driver.buatBerkas(allocator, jenis, args[1]);
         }
     } else if (std.mem.eql(u8, cmd, "run")) {
         var path: ?[]const u8 = null;
@@ -110,6 +102,12 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
         } else {
             try stderr.print("error: 'tenun build' membutuhkan path file\n", .{});
         }
+    } else if (std.mem.endsWith(u8, cmd, ".tenun")) {
+        // `tenun <file.tenun> [arg...]` — jalankan berkas langsung (tanpa "run").
+        var prog = std.ArrayList([]const u8).init(allocator);
+        defer prog.deinit();
+        for (args[1..]) |a| try prog.append(a);
+        try driver.run(allocator, cmd, true, prog.items);
     } else {
         try stderr.print("error: perintah tidak dikenal: {s}\n", .{cmd});
         try printUsage(stdout);
@@ -121,8 +119,10 @@ fn printUsage(writer: anytype) !void {
         \\tenun {s}
         \\
         \\Penggunaan:
+        \\  tenun <file.tenun> [arg...] menjalankan program (argumen lewat builtin argumen())
+        \\  tenun                       menjalankan index.tenun (bila ada)
         \\  tenun version          menampilkan versi
-        \\  tenun run <file> [arg...]   menjalankan program (argumen lewat builtin argumen())
+        \\  tenun run <file> [arg...]   sama dengan di atas (bentuk lama)
         \\  tenun run <file> --interp   menjalankan via tree-walking interpreter
         \\  tenun jalan <skrip>    menjalankan skrip dari "skrip" di tenun.json (mirip npm run)
         \\  tenun build <file>     kompilasi ke executable native (<file>.exe)
@@ -131,10 +131,6 @@ fn printUsage(writer: anytype) !void {
         \\  tenun fmt <file> --stdout   cetak hasil rapi ke layar
         \\  tenun repl             mode interaktif (REPL)
         \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
-        \\  tenun baru <nama>      buat proyek web MVC baru (kerangka Jala)
-        \\  tenun buat:controller <nama>   buat controller di app/controllers/
-        \\  tenun buat:model <nama>        buat model di app/models/
-        \\  tenun buat:view <nama>         buat view di views/
         \\
         \\Dalam kode, pakai modul dengan: impor "<modul>";
         \\
