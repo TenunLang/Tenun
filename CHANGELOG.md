@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — builtin infoOS + lingkungan (info OS)
+
+- `infoOS(kunci)` (72): nama OS/arch/host/pengguna/cpu/cwd/temp. `lingkungan(nama)` (73): env var. builtins/os.zig. Total builtin id 0-73. Dasar modul-os.
+
 ## 2026-06-06 — tanggal + zona waktu
 
 - `tanggal(ts, offsetJam): teks` (70) -> "YYYY-MM-DD HH:MM:SS" pada offset zona waktu (jam). `waktuMili()` (71) ms. builtins/waktu.zig (civil-from-days). Total builtin id 0-71.

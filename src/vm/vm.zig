@@ -13,6 +13,7 @@ const tls = @import("../builtins/tls.zig");
 const siar = @import("../builtins/siar.zig");
 const argv = @import("../builtins/argv.zig");
 const waktu = @import("../builtins/waktu.zig");
+const os = @import("../builtins/os.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -990,6 +991,8 @@ const VM = struct {
             69 => .{ .teks = text.keKecil(a, args[0].teks) catch return self.rt("gagal keKecil") },
             70 => .{ .teks = waktu.tanggal(a, args[0].bulat, args[1].bulat) catch return self.rt("gagal tanggal") },
             71 => .{ .bulat = std.time.milliTimestamp() },
+            72 => .{ .teks = os.info(a, args[0].teks) catch return self.rt("gagal infoOS") },
+            73 => .{ .teks = os.lingkungan(a, args[0].teks) catch return self.rt("gagal lingkungan") },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk Value.kosong;

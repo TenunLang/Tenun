@@ -318,6 +318,8 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `waktu(): bulat` / `waktuMili(): bulat` | unix timestamp (detik / ms) | `[JALAN]` |
 | `tanggal(ts: bulat, offsetJam: bulat): teks` | "YYYY-MM-DD HH:MM:SS" pada zona waktu | `[JALAN]` |
 | `acakAngka(min: bulat, max: bulat): bulat` | bilangan acak [min,max) | `[JALAN]` |
+| `infoOS(kunci: teks): teks` | info OS (nama/arch/host/pengguna/cpu/cwd/temp) | `[JALAN]` |
+| `lingkungan(nama: teks): teks` | variabel lingkungan | `[JALAN]` |
 | `pangkas`/`keBesar`/`keKecil`/`keDesimal` | util teks | `[JALAN]` |
 | `httpKirim(metode, url, header, body: teks): teks` | HTTP request (TLS auto utk https) | `[JALAN]` |
 | `sambungAman(inang: teks, port: bulat): bulat` | sambung soket TLS, kembalikan handle | `[JALAN]` |
