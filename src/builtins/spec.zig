@@ -104,6 +104,7 @@ pub const list = [_]Spec{
     .{ .name = "acakDesimal", .params = &.{}, .ret = .desimal },
     .{ .name = "desimalDari", .params = &.{.bulat}, .ret = .desimal },
     .{ .name = "bulatDari", .params = &.{.desimal}, .ret = .bulat },
+    .{ .name = "teksDari", .params = &.{.desimal}, .ret = .teks },
 };
 
 pub const layani_id = 9;

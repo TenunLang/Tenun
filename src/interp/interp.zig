@@ -554,6 +554,7 @@ pub const Interpreter = struct {
             90 => .{ .desimal = std.crypto.random.float(f64) },
             91 => .{ .desimal = @floatFromInt(args[0].bulat) },
             92 => .{ .bulat = @intFromFloat(@trunc(args[0].desimal)) },
+            93 => .{ .teks = std.fmt.allocPrint(a, "{d}", .{args[0].desimal}) catch return self.runtimeError(pos, "kehabisan memori") },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk .kosong;

@@ -346,6 +346,7 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `acakDesimal(): desimal` | bilangan acak desimal [0,1) | `[JALAN]` |
 | `desimalDari(bulat): desimal` | konversi `bulat` ke `desimal` | `[JALAN]` |
 | `bulatDari(desimal): bulat` | konversi `desimal` ke `bulat` (truncate) | `[JALAN]` |
+| `teksDari(desimal): teks` | konversi `desimal` ke `teks` | `[JALAN]` |
 | `bacaFile(path: teks): teks` | baca isi file | `[JALAN]` |
 | `tulisFile(path: teks, isi: teks): kosong` | tulis isi ke file | `[JALAN]` |
 | `ambil(url: teks): teks` | HTTP/HTTPS GET (TLS otomatis) | `[JALAN]` |
