@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — builtin decode PNG (bacaGambar)
+
+- `bacaGambar(path)` (94): decode PNG 8-bit (grayscale/RGB/RGBA/palette) via std.compress.zlib + unfilter -> teks "lebar tinggi g0 g1 ..." grayscale 0-255 (builtins/gambar.zig). Total builtin id 0-94. Dasar `modul-citra` (citra_png) + OCR dari gambar PNG asli.
+
 ## 2026-06-06 — builtin matematika + konversi numerik (fondasi ML)
 
 - Builtin math: `eksp`(81), `ln`(82), `log`(83), `sin`(84), `cos`(85), `tan`(86), `tanh`(87), `lantai`(88), `langit`(89), `acakDesimal`(90). Konversi: `desimalDari`(91) bulat->desimal, `bulatDari`(92) desimal->bulat, `teksDari`(93) desimal->teks. Total builtin id 0-93. Dispatch di interp.zig + vm.zig (codegen native tetap pakai VM untuk stdlib).

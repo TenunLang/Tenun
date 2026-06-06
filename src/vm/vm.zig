@@ -15,6 +15,7 @@ const argv = @import("../builtins/argv.zig");
 const waktu = @import("../builtins/waktu.zig");
 const os = @import("../builtins/os.zig");
 const proses = @import("../builtins/proses.zig");
+const gambar = @import("../builtins/gambar.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -1028,6 +1029,7 @@ const VM = struct {
             91 => .{ .desimal = @floatFromInt(args[0].bulat) },
             92 => .{ .bulat = @intFromFloat(@trunc(args[0].desimal)) },
             93 => .{ .teks = std.fmt.allocPrint(a, "{d}", .{args[0].desimal}) catch return self.rt("kehabisan memori") },
+            94 => .{ .teks = gambar.bacaPng(a, args[0].teks) catch return self.rt("gagal baca gambar PNG") },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk Value.kosong;
