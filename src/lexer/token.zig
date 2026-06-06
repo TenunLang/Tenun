@@ -37,6 +37,8 @@ pub const TokenKind = enum {
     slash,
     percent,
     assign,
+    plus_plus,
+    minus_minus,
     plus_eq,
     minus_eq,
     star_eq,

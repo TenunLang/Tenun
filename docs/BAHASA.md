@@ -196,7 +196,7 @@ Map dan struct belum tersedia `[RENCANA]`.
 Urutan precedence dari paling longgar ke paling erat: `=` `+=` ... lalu `||` lalu `&&` lalu `|` lalu `^` lalu `&` lalu `== !=` lalu `< > <= >=` lalu `<< >>` lalu `+ -` lalu `* / %` lalu unary `! -` lalu pemanggilan/grup. Detail lengkap di `GRAMMAR.md`.
 
 - Bitwise (`& | ^ << >>`) hanya untuk `bulat`.
-- Penugasan majemuk: `x += e` setara `x = x + e` (juga `-= *= /= %=`).
+- Penugasan majemuk: `x += e` setara `x = x + e` (juga `-= *= /= %=`). Increment/decrement: `x++` / `x--`.
 - Literal angka: desimal `42`, heksadesimal `0xFF`, biner `0b1010`.
 - Komentar: baris `// ...` dan blok `/* ... */`.
 

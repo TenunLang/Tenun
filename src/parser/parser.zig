@@ -278,6 +278,19 @@ const Parser = struct {
             const bin = try self.newExpr(left.pos, .{ .binary = .{ .op = op, .left = left, .right = value } });
             return self.newExpr(left.pos, .{ .assign = .{ .target = left, .value = bin } });
         }
+        // Increment/decrement: x++ / x--  ->  x = x + 1 / x - 1
+        if (self.check(.plus_plus) or self.check(.minus_minus)) {
+            const t = self.advance();
+            const op: ast.BinaryOp = if (t.kind == .plus_plus) .add else .sub;
+            const lt = std.meta.activeTag(left.data);
+            if (lt != .ident and lt != .index) {
+                self.diags.report(.err, t.line, t.column, "'++'/'--' butuh variabel atau elemen larik") catch return Error.OutOfMemory;
+                return Error.ParseError;
+            }
+            const one = try self.newExpr(left.pos, .{ .number = "1" });
+            const bin = try self.newExpr(left.pos, .{ .binary = .{ .op = op, .left = left, .right = one } });
+            return self.newExpr(left.pos, .{ .assign = .{ .target = left, .value = bin } });
+        }
         return left;
     }
 

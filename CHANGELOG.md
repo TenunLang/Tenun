@@ -2,6 +2,11 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — ++ / --
+
+- `x++` / `x--` (increment/decrement) untuk variabel & elemen larik (desugar `x = x + 1`).
+
+
 ## 2026-06-06 — cocok (switch)
 
 - `cocok x { nilai { } lain { } }` — pencocokan nilai (==), tanpa fall-through, `lain` default. Statement match_stmt, VM via rantai jump, interp valueEql. Codegen unsupported.
