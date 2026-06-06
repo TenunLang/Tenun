@@ -1194,7 +1194,16 @@ const VM = struct {
         const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
         var listener = addr.listen(.{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
 
-        const workers = @max(@as(usize, 1), std.Thread.getCpuCount() catch 4);
+        // Jumlah worker: env TENUN_WORKERS bila ada, selain itu jumlah CPU.
+        // Set TENUN_WORKERS=1 untuk app yang memakai koneksi soket (DB/Redis) per
+        // proses; skalakan dengan menjalankan banyak proses di belakang load balancer.
+        var workers = @max(@as(usize, 1), std.Thread.getCpuCount() catch 4);
+        if (std.process.getEnvVarOwned(self.allocator, "TENUN_WORKERS")) |wv| {
+            defer self.allocator.free(wv);
+            if (std.fmt.parseInt(usize, std.mem.trim(u8, wv, " \t\r\n"), 10)) |n| {
+                if (n >= 1) workers = n;
+            } else |_| {}
+        } else |_| {}
         std.io.getStdErr().writer().print("[tenun] server berjalan di http://localhost:{d} ({d} worker)\n", .{ port, workers }) catch {};
 
         const ctx = WorkerCtx{

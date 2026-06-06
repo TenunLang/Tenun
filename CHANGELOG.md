@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — TENUN_WORKERS (jumlah worker server konfigurabel)
+
+- `layani(port)` (VM) baca env `TENUN_WORKERS` (default = jumlah CPU). Set `TENUN_WORKERS=1` untuk app yang memakai koneksi soket persisten (DB/Redis) — tiap proses pegang soket sendiri; skalakan via banyak proses + load balancer (model ala PHP-FPM). Soket builtin (`sambung`/`kirim`/`terima`) bersifat per-VM, jadi tak aman dibagi antar worker-thread.
+
 ## 2026-06-06 — `tenun <file>` langsung + default index.tenun
 
 - `tenun <file.tenun> [arg...]` menjalankan berkas tanpa subperintah `run` (argumen tetap lewat `argumen()`). `tenun` tanpa argumen menjalankan `index.tenun` bila ada. `run` lama tetap jalan (kompatibel). Dasar DX kerangka Jala (`tenun` = start server, `tenun nakhoda.tenun ...` = generator).
