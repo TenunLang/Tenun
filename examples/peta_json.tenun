@@ -1,0 +1,14 @@
+// peta dinamis: data bersarang (objek JSON)
+biar user: peta = peta{
+    "nama": "Taqin",
+    "umur": 27,
+    "hobi": ["tenun", "kode"],
+    "alamat": peta{ "kota": "Solo", "pos": "57100" }
+};
+cetak(user["nama"]);
+cetak(keTeks(user["umur"]));
+biar hobi: []teks = user["hobi"];
+cetak(hobi[0]);
+biar al: peta = user["alamat"];
+cetak(al["kota"]);
+cetak(user);   // cetak utuh (JSON-ish)

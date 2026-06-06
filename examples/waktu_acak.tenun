@@ -1,0 +1,6 @@
+// Waktu + acak
+cetak("unix sekarang: " + keTeks(waktu()));
+biar dadu: bulat = acakAngka(1, 7);
+cetak("dadu: " + keTeks(dadu));
+biar token: teks = base64(acak(12));
+cetak("token: " + token);

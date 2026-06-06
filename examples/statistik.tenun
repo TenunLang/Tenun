@@ -1,0 +1,14 @@
+// Statistik larik (for-each)
+biar data: []bulat = [12, 7, 25, 3, 18, 9];
+biar total: bulat = 0;
+biar maks: bulat = data[0];
+biar min: bulat = data[0];
+untuk x dari data {
+    total += x;
+    kalau x > maks { maks = x; }
+    kalau x < min { min = x; }
+}
+cetak("total = " + keTeks(total));
+cetak("rata  = " + keTeks(total / panjang(data)));
+cetak("maks  = " + keTeks(maks));
+cetak("min   = " + keTeks(min));

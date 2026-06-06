@@ -1,0 +1,13 @@
+// Bubble sort larik bulat
+biar a: []bulat = [5, 2, 9, 1, 7, 3];
+biar n: bulat = panjang(a);
+untuk i dari 0 sampai n {
+    untuk j dari 0 sampai n - 1 {
+        kalau a[j] > a[j + 1] {
+            biar tmp: bulat = a[j];
+            a[j] = a[j + 1];
+            a[j + 1] = tmp;
+        }
+    }
+}
+cetak(a);   // [1, 2, 3, 5, 7, 9]

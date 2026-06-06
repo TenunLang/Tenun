@@ -1,0 +1,14 @@
+// Kalkulator sederhana (cocok pada operator)
+fungsi hitung(a: bulat, op: teks, b: bulat): bulat {
+    cocok op {
+        "+" { kembali a + b; }
+        "-" { kembali a - b; }
+        "*" { kembali a * b; }
+        "/" { kembali a / b; }
+        lain { kembali 0; }
+    }
+    kembali 0;
+}
+cetak(keTeks(hitung(6, "+", 4)));   // 10
+cetak(keTeks(hitung(6, "*", 4)));   // 24
+cetak(keTeks(hitung(20, "/", 5)));  // 4

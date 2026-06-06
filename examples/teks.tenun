@@ -1,0 +1,12 @@
+// Operasi teks
+biar kalimat: teks = "  Tenun itu Bahasa Pemrograman  ";
+biar bersih: teks = pangkas(kalimat);
+cetak("[" + bersih + "]");
+cetak(keBesar(bersih));
+cetak(keKecil(bersih));
+
+biar kata: []teks = pisah(bersih, " ");
+cetak("jumlah kata: " + keTeks(panjang(kata)));
+cetak("gabung: " + gabung(kata, "-"));
+cetak("ganti: " + ganti(bersih, "Bahasa", "bahasa"));
+cetak("ada 'itu'? indeks " + keTeks(cari(bersih, "itu")));

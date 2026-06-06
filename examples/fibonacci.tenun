@@ -1,0 +1,15 @@
+// Fibonacci: rekursif + iteratif
+fungsi fib(n: bulat): bulat {
+    kalau n < 2 { kembali n; }
+    kembali fib(n - 1) + fib(n - 2);
+}
+cetak("fib(10) = " + keTeks(fib(10)));   // 55
+
+biar a: bulat = 0;
+biar b: bulat = 1;
+untuk i dari 0 sampai 10 {
+    biar c: bulat = a + b;
+    a = b;
+    b = c;
+}
+cetak("iteratif = " + keTeks(a));

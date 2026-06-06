@@ -1,0 +1,11 @@
+// cocok (switch)
+fungsi hari(n: bulat): teks {
+    cocok n {
+        1 { kembali "Senin"; }
+        2 { kembali "Selasa"; }
+        3 { kembali "Rabu"; }
+        lain { kembali "Hari lain"; }
+    }
+    kembali "?";
+}
+untuk i dari 1 sampai 5 { cetak(hari(i)); }

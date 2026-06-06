@@ -1,0 +1,10 @@
+// Bitwise + flag (hex/biner)
+tetap BACA: bulat = 0b001;
+tetap TULIS: bulat = 0b010;
+tetap EKSEKUSI: bulat = 0b100;
+
+biar izin: bulat = BACA | TULIS;
+cetak("punya tulis? " + keTeks(izin & TULIS));      // 2 (truthy)
+cetak("punya eksekusi? " + keTeks(izin & EKSEKUSI)); // 0
+cetak("0xFF & 0x0F = " + keTeks(0xFF & 0x0F));        // 15
+cetak("1 << 8 = " + keTeks(1 << 8));                  // 256

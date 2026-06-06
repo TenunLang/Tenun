@@ -1,0 +1,12 @@
+// First-class functions + higher-order
+fungsi tambah(a: bulat, b: bulat): bulat { kembali a + b; }
+fungsi kali(a: bulat, b: bulat): bulat { kembali a * b; }
+fungsi terapkan(f: fungsi, x: bulat, y: bulat): dinamis { kembali f(x, y); }
+
+biar ops: []fungsi = [tambah, kali];
+cetak(keTeks(terapkan(ops[0], 6, 7)));   // 13
+cetak(keTeks(terapkan(ops[1], 6, 7)));   // 42
+
+biar op: fungsi = tambah;
+op = kali;
+cetak(keTeks(op(3, 4)));                 // 12

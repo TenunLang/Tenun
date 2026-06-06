@@ -1,0 +1,10 @@
+// coba/tangkap (error handling)
+fungsi bagi(x: bulat, y: bulat): bulat { kembali x / y; }
+
+untuk i dari 0 sampai 3 {
+    coba {
+        cetak(keTeks(i) + " -> " + keTeks(bagi(10, i)));
+    } tangkap (e) {
+        cetak(keTeks(i) + " -> galat: " + e);
+    }
+}
