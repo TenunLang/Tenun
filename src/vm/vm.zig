@@ -62,6 +62,8 @@ pub const OpCode = enum(u8) {
     print,
     array_make,
     map_make,
+    coba_mulai,
+    coba_akhir,
     index_get,
     index_set,
     array_len,
@@ -376,6 +378,25 @@ const Compiler = struct {
                     try lc.cont_jumps.append(j);
                 }
             },
+            .try_stmt => |d| {
+                try c.emitOp(.coba_mulai);
+                const hpos = c.code.items.len;
+                try c.emitU16(0); // placeholder offset ke handler
+                try self.block(d.body);
+                try c.emitOp(.coba_akhir);
+                const endj = try self.emitJump(.jump);
+                // patch offset coba_mulai -> awal handler
+                const handler_start = c.code.items.len;
+                const off: u16 = @intCast(handler_start - (hpos + 2));
+                c.code.items[hpos] = @intCast(off >> 8);
+                c.code.items[hpos + 1] = @intCast(off & 0xff);
+                // handler: galat (teks) jadi lokal pertama
+                self.beginScope();
+                _ = self.declareLocal(d.err_name);
+                for (d.handler) |hstmt| try self.stmt(hstmt);
+                try self.endScope();
+                try self.patchJump(endj);
+            },
             .return_stmt => |maybe| {
                 if (maybe) |e| try self.expr(e) else try c.emitOp(.kosong_);
                 try c.emitOp(.ret);
@@ -577,6 +598,13 @@ const Frame = struct {
     base: usize,
 };
 
+// Handler coba/tangkap: titik pemulihan saat runtime error.
+const Handler = struct {
+    handler_ip: usize,
+    frame_len: usize,
+    stack_top: usize,
+};
+
 const stack_max = 1 << 16;
 
 const VM = struct {
@@ -595,6 +623,8 @@ const VM = struct {
     req_headers: [64]std.http.Header = undefined,
     req_header_count: usize = 0,
     conns: std.ArrayList(?std.net.Stream),
+    handlers: std.ArrayList(Handler),
+    last_error: []const u8 = "",
 
     fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter, functions: []Function, num_globals: usize) !VM {
         const slots = try allocator.alloc(Value, num_globals);
@@ -610,6 +640,7 @@ const VM = struct {
             .global_slots = slots,
             .vals = std.heap.ArenaAllocator.init(allocator),
             .conns = std.ArrayList(?std.net.Stream).init(allocator),
+            .handlers = std.ArrayList(Handler).init(allocator),
         };
     }
     fn deinit(self: *VM) void {
@@ -619,6 +650,7 @@ const VM = struct {
         self.vals.deinit();
         for (self.conns.items) |c| if (c) |s| s.close();
         self.conns.deinit();
+        self.handlers.deinit();
     }
 
     inline fn push(self: *VM, v: Value) void {
@@ -647,19 +679,36 @@ const VM = struct {
         return self.pop();
     }
 
+    const Alir = enum { lanjut, selesai };
+
     fn execLoop(self: *VM, stop: usize) !void {
-        var frame = &self.frames.items[self.frames.items.len - 1];
-        var code = frame.func.chunk.code.items;
-
         while (true) {
-            const op: OpCode = @enumFromInt(code[frame.ip]);
-            frame.ip += 1;
+            const alir = self.execOne(stop) catch |e| {
+                if (e == error.RuntimeError and self.handlers.items.len > 0) {
+                    const h = self.handlers.pop().?;
+                    self.frames.shrinkRetainingCapacity(h.frame_len);
+                    self.top = h.stack_top;
+                    self.frames.items[self.frames.items.len - 1].ip = h.handler_ip;
+                    self.push(.{ .teks = self.last_error });
+                    continue;
+                }
+                return e;
+            };
+            if (alir == .selesai) return;
+        }
+    }
 
-            switch (op) {
-                .constant => {
-                    const i = readU16(code, &frame.ip);
-                    self.push(frame.func.chunk.consts.items[i]);
-                },
+    fn execOne(self: *VM, stop: usize) !Alir {
+        const frame = &self.frames.items[self.frames.items.len - 1];
+        const code = frame.func.chunk.code.items;
+        const op: OpCode = @enumFromInt(code[frame.ip]);
+        frame.ip += 1;
+
+        switch (op) {
+            .constant => {
+                const i = readU16(code, &frame.ip);
+                self.push(frame.func.chunk.consts.items[i]);
+            },
                 .true_ => self.push(.{ .bool = true }),
                 .false_ => self.push(.{ .bool = false }),
                 .kosong_ => self.push(.kosong),
@@ -793,8 +842,6 @@ const VM = struct {
                     }
                     const result = try self.callBuiltin(id, argbuf[0..argc]);
                     self.push(result);
-                    frame = &self.frames.items[self.frames.items.len - 1];
-                    code = frame.func.chunk.code.items;
                 },
                 .call => {
                     const fidx = readU16(code, &frame.ip);
@@ -802,8 +849,6 @@ const VM = struct {
                     frame.ip += 1;
                     const base = self.top - argc;
                     try self.frames.append(.{ .func = &self.functions[fidx], .ip = 0, .base = base });
-                    frame = &self.frames.items[self.frames.items.len - 1];
-                    code = frame.func.chunk.code.items;
                 },
                 .call_value => {
                     const argc = code[frame.ip];
@@ -814,20 +859,28 @@ const VM = struct {
                     if (self.functions[fidx].arity != argc) return self.rt("jumlah argumen tidak sesuai");
                     const base = self.top - argc;
                     try self.frames.append(.{ .func = &self.functions[fidx], .ip = 0, .base = base });
-                    frame = &self.frames.items[self.frames.items.len - 1];
-                    code = frame.func.chunk.code.items;
+                },
+                .coba_mulai => {
+                    const off = readU16(code, &frame.ip);
+                    try self.handlers.append(.{
+                        .handler_ip = frame.ip + off,
+                        .frame_len = self.frames.items.len,
+                        .stack_top = self.top,
+                    });
+                },
+                .coba_akhir => {
+                    _ = self.handlers.pop();
                 },
                 .ret => {
                     const result = self.pop();
                     const done = self.frames.pop().?;
                     self.top = done.base;
                     self.push(result);
-                    if (self.frames.items.len == stop) return;
-                    frame = &self.frames.items[self.frames.items.len - 1];
-                    code = frame.func.chunk.code.items;
+                    if (self.frames.items.len == stop) return .selesai;
+                    return .lanjut;
                 },
             }
-        }
+        return .lanjut;
     }
 
     fn binary(self: *VM, op: OpCode) !void {
@@ -1195,6 +1248,7 @@ const VM = struct {
     }
 
     fn rt(self: *VM, message: []const u8) anyerror {
+        self.last_error = message;
         self.diags.report(.err, 0, 0, message) catch {};
         return error.RuntimeError;
     }

@@ -205,6 +205,7 @@ const Codegen = struct {
                 self.popScope();
             },
             .foreach_stmt => return self.unsupported(s.pos, "for-each larik belum didukung di codegen native (pakai 'tenun run' / VM)"),
+            .try_stmt => return self.unsupported(s.pos, "coba/tangkap belum didukung di codegen native (pakai 'tenun run' / VM)"),
             .return_stmt => |maybe| {
                 if (maybe) |e| {
                     try self.w("return ");

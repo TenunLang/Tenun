@@ -79,6 +79,7 @@ const Parser = struct {
         if (self.check(.kw_selama)) return self.whileStmt();
         if (self.check(.kw_untuk)) return self.forStmt();
         if (self.check(.kw_kembali)) return self.returnStmt();
+        if (self.check(.kw_coba)) return self.tryStmt();
         if (self.check(.kw_henti)) {
             const kw = self.advance();
             _ = try self.expect(.semicolon, "harap ';' setelah henti");
@@ -146,6 +147,21 @@ const Parser = struct {
             .var_name = name.lexeme,
             .iter = start,
             .body = body,
+        } });
+    }
+
+    fn tryStmt(self: *Parser) Error!*ast.Stmt {
+        const kw = self.advance();
+        const body = try self.block();
+        _ = try self.expect(.kw_tangkap, "harap 'tangkap' setelah blok 'coba'");
+        _ = try self.expect(.lparen, "harap '(' lalu nama variabel galat");
+        const name = try self.expect(.identifier, "harap nama variabel galat");
+        _ = try self.expect(.rparen, "harap ')' setelah nama variabel galat");
+        const handler = try self.block();
+        return self.newStmt(posOf(kw), .{ .try_stmt = .{
+            .body = body,
+            .err_name = name.lexeme,
+            .handler = handler,
         } });
     }
 

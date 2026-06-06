@@ -154,7 +154,14 @@ pub const Stmt = struct {
         return_stmt: ?*Expr,
         break_stmt,
         continue_stmt,
+        try_stmt: Try,
         block: []*Stmt,
+    };
+
+    pub const Try = struct {
+        body: []*Stmt,
+        err_name: []const u8,
+        handler: []*Stmt,
     };
 
     pub const VarDecl = struct {
@@ -287,6 +294,13 @@ fn dumpStmt(stmt: *Stmt, writer: anytype) anyerror!void {
         },
         .break_stmt => try writer.writeAll("(henti)"),
         .continue_stmt => try writer.writeAll("(lanjut)"),
+        .try_stmt => |d| {
+            try writer.writeAll("(coba ");
+            try dumpStmts(d.body, writer);
+            try writer.print(" tangkap {s} ", .{d.err_name});
+            try dumpStmts(d.handler, writer);
+            try writer.writeByte(')');
+        },
         .block => |stmts| try dumpStmts(stmts, writer),
     }
 }

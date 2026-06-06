@@ -167,6 +167,13 @@ const Sema = struct {
                 try self.checkBlock(d.body, ret);
                 self.loop_depth -= 1;
             },
+            .try_stmt => |d| {
+                try self.checkBlock(d.body, ret);
+                try self.pushScope();
+                defer self.popScope();
+                try self.define(stmt.pos, d.err_name, .{ .type = .teks, .is_const = false });
+                try self.checkBlock(d.handler, ret);
+            },
             .break_stmt => {
                 if (self.loop_depth == 0) try self.report(stmt.pos, "'henti' hanya boleh di dalam loop");
             },

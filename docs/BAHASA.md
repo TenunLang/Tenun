@@ -243,6 +243,23 @@ untuk b dari buah {
 
 `untuk <nama> dari <larik>` (tanpa `sampai`) mengulang tiap elemen; `nama` bertipe sama dengan elemen larik. Bedakan dengan bentuk rentang `untuk i dari A sampai B`.
 
+### coba & tangkap (error handling) `[JALAN]`
+
+Tangkap galat runtime (pembagian nol, indeks di luar batas, gagal builtin/koneksi, dll) supaya program tidak berhenti:
+
+```tenun
+coba {
+    biar x: bulat = 10 / 0;
+} tangkap (e) {
+    cetak("galat: " + e);    // e: teks berisi pesan galat
+}
+cetak("tetap jalan");
+```
+
+- `e` bertipe `teks` (pesan galat), hanya hidup di blok `tangkap`.
+- Galat dari fungsi yang dipanggil di dalam `coba` ikut tertangkap (unwind lintas pemanggilan). Bisa bersarang.
+- Berguna untuk server agar satu request gagal tidak mematikan proses.
+
 ### henti & lanjut (break / continue) `[JALAN]`
 
 Di dalam `selama` atau `untuk`:

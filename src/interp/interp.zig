@@ -39,6 +39,7 @@ pub const Interpreter = struct {
     returning: bool = false,
     breaking: bool = false,
     continuing: bool = false,
+    last_error: []const u8 = "",
     ret_value: Value = .kosong,
     resp_status: u16 = 200,
     resp_headers: [32]std.http.Header = undefined,
@@ -157,6 +158,19 @@ pub const Interpreter = struct {
             },
             .break_stmt => self.breaking = true,
             .continue_stmt => self.continuing = true,
+            .try_stmt => |d| {
+                self.execBlock(d.body) catch |e| {
+                    if (e == error.RuntimeError) {
+                        try self.locals.append(Scope.init(self.allocator));
+                        defer {
+                            var sc = self.locals.pop().?;
+                            sc.deinit();
+                        }
+                        try self.locals.items[self.locals.items.len - 1].put(d.err_name, .{ .teks = self.last_error });
+                        try self.execBlock(d.handler);
+                    } else return e;
+                };
+            },
             .block => |stmts| try self.execBlock(stmts),
         }
     }
@@ -697,6 +711,7 @@ pub const Interpreter = struct {
     }
 
     fn runtimeError(self: *Interpreter, pos: ast.Pos, message: []const u8) Error {
+        self.last_error = message;
         self.diags.report(.err, pos.line, pos.column, message) catch {};
         return Error.RuntimeError;
     }

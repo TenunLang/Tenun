@@ -20,6 +20,8 @@ pub const TokenKind = enum {
     kw_kosong,
     kw_henti,
     kw_lanjut,
+    kw_coba,
+    kw_tangkap,
 
     ty_bulat,
     ty_desimal,
@@ -91,6 +93,8 @@ pub const keywords = std.StaticStringMap(TokenKind).initComptime(.{
     .{ "kosong", .kw_kosong },
     .{ "henti", .kw_henti },
     .{ "lanjut", .kw_lanjut },
+    .{ "coba", .kw_coba },
+    .{ "tangkap", .kw_tangkap },
     .{ "bulat", .ty_bulat },
     .{ "desimal", .ty_desimal },
     .{ "teks", .ty_teks },

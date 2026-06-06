@@ -114,6 +114,12 @@ fn stmt(s: *ast.Stmt, writer: anytype, level: usize) anyerror!void {
         },
         .break_stmt => try writer.writeAll("henti;"),
         .continue_stmt => try writer.writeAll("lanjut;"),
+        .try_stmt => |d| {
+            try writer.writeAll("coba ");
+            try block(d.body, writer, level);
+            try writer.print(" tangkap ({s}) ", .{d.err_name});
+            try block(d.handler, writer, level);
+        },
         .block => |stmts| try block(stmts, writer, level),
     }
 }

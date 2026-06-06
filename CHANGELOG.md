@@ -2,6 +2,11 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — coba/tangkap (error handling)
+
+- `coba { } tangkap (e) { }` menangkap galat runtime (div nol, indeks luar batas, gagal builtin). `e: teks` = pesan. Unwind lintas frame, bisa bersarang.
+- VM: refactor execLoop -> execOne (recompute frame/code per-op) + wrapper catch + handler stack (opcode coba_mulai/coba_akhir). Interp: catch error.RuntimeError + last_error. Codegen native: unsupported (pakai VM).
+
 ## 2026-06-06 — bitwise, hex/biner, komentar blok, penugasan majemuk, builtin waktu/string
 
 - Operator bitwise `& | ^ << >>` (untuk bulat). Precedence ala C.
