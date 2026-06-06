@@ -593,6 +593,62 @@ const J_GITIGNORE =
     \\tenun_modul/
 ;
 
+// Generator berkas dalam proyek (mirip `php artisan make:`).
+// jenis: "controller" | "model" | "view".
+pub fn buatBerkas(allocator: std.mem.Allocator, jenis: []const u8, nama: []const u8) !void {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+
+    var rel: []const u8 = undefined;
+    var isi: []const u8 = undefined;
+    var owned = false;
+
+    if (std.mem.eql(u8, jenis, "controller")) {
+        rel = try std.fmt.allocPrint(allocator, "app/controllers/{s}.tenun", .{nama});
+        isi = try std.fmt.allocPrint(allocator,
+            \\// Controller {s}.
+            \\
+            \\fungsi {s}_index(): teks {{
+            \\    kembali jala_tampil_tata("layout", "{s}", peta{{ "judul": "{s}" }});
+            \\}}
+            \\
+        , .{ nama, nama, nama, nama });
+        owned = true;
+    } else if (std.mem.eql(u8, jenis, "model")) {
+        rel = try std.fmt.allocPrint(allocator, "app/models/{s}.tenun", .{nama});
+        isi = try std.fmt.allocPrint(allocator,
+            \\// Model {s}. Pakai modul "orm" untuk DB, atau simpan/muat (kunci-nilai).
+            \\
+            \\fungsi {s}_semua(): []teks {{
+            \\    biar data: teks = muat("{s}");
+            \\    kalau panjangTeks(data) == 0 {{ kembali []; }}
+            \\    kembali pisah(data, "\n");
+            \\}}
+            \\
+        , .{ nama, nama, nama });
+        owned = true;
+    } else if (std.mem.eql(u8, jenis, "view")) {
+        rel = try std.fmt.allocPrint(allocator, "views/{s}.batik", .{nama});
+        isi = try std.fmt.allocPrint(allocator, "<h2>{{{{judul}}}}</h2>\n<p>View {s}.</p>\n", .{nama});
+        owned = true;
+    } else {
+        try stderr.print("error: jenis '{s}' tidak dikenal. Pakai: controller | model | view\n", .{jenis});
+        return;
+    }
+    defer if (owned) {
+        allocator.free(@constCast(rel));
+        allocator.free(@constCast(isi));
+    };
+
+    if (std.fs.cwd().access(rel, .{})) {
+        try stderr.print("error: '{s}' sudah ada\n", .{rel});
+        return;
+    } else |_| {}
+
+    try tulisProyek(allocator, ".", rel, isi);
+    try stdout.print("[tenun] dibuat: {s}\n", .{rel});
+}
+
 // Scaffold proyek web MVC baru bernama `nama` (mirip `laravel new`).
 pub fn baru(allocator: std.mem.Allocator, nama: []const u8) !void {
     const stdout = std.io.getStdOut().writer();

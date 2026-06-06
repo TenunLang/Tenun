@@ -43,6 +43,13 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
         } else {
             try driver.baru(allocator, args[1]);
         }
+    } else if (std.mem.startsWith(u8, cmd, "buat:")) {
+        const jenis = cmd["buat:".len..];
+        if (args.len < 2) {
+            try stderr.print("error: 'tenun buat:{s}' membutuhkan nama (mis. 'tenun buat:{s} home')\n", .{ jenis, jenis });
+        } else {
+            try driver.buatBerkas(allocator, jenis, args[1]);
+        }
     } else if (std.mem.eql(u8, cmd, "run")) {
         var path: ?[]const u8 = null;
         var use_vm = true;
@@ -125,6 +132,9 @@ fn printUsage(writer: anytype) !void {
         \\  tenun repl             mode interaktif (REPL)
         \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
         \\  tenun baru <nama>      buat proyek web MVC baru (kerangka Jala)
+        \\  tenun buat:controller <nama>   buat controller di app/controllers/
+        \\  tenun buat:model <nama>        buat model di app/models/
+        \\  tenun buat:view <nama>         buat view di views/
         \\
         \\Dalam kode, pakai modul dengan: impor "<modul>";
         \\
