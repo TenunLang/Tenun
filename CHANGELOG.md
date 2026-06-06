@@ -2,6 +2,11 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — builtin matematika + konversi numerik (fondasi ML)
+
+- Builtin math: `eksp`(81), `ln`(82), `log`(83), `sin`(84), `cos`(85), `tan`(86), `tanh`(87), `lantai`(88), `langit`(89), `acakDesimal`(90). Konversi: `desimalDari`(91) bulat->desimal, `bulatDari`(92) desimal->bulat. Total builtin id 0-92. Dispatch di interp.zig + vm.zig (codegen native tetap pakai VM untuk stdlib).
+- Dasar `modul-belajar` (pembelajaran mesin): MLP+backprop, regresi linear/logistik, k-NN, k-means — murni Tenun.
+
 ## 2026-06-06 — exec + operasi berkas/dir
 
 - `jalankan(perintah)` (74) jalankan shell -> stdout (builtins/proses.zig). `daftarBerkas`(75)/`buatDir`(76)/`hapusBerkas`(77)/`hapusDir`(78)/`ukuranBerkas`(79)/`apakahDir`(80) (fs.zig). Total builtin id 0-80. Dasar modul-proses & modul-berkas.

@@ -92,6 +92,18 @@ pub const list = [_]Spec{
     .{ .name = "hapusDir", .params = &.{.teks}, .ret = .kosong },
     .{ .name = "ukuranBerkas", .params = &.{.teks}, .ret = .bulat },
     .{ .name = "apakahDir", .params = &.{.teks}, .ret = .bool },
+    .{ .name = "eksp", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "ln", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "log", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "sin", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "cos", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "tan", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "tanh", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "lantai", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "langit", .params = &.{.desimal}, .ret = .desimal },
+    .{ .name = "acakDesimal", .params = &.{}, .ret = .desimal },
+    .{ .name = "desimalDari", .params = &.{.bulat}, .ret = .desimal },
+    .{ .name = "bulatDari", .params = &.{.desimal}, .ret = .bulat },
 };
 
 pub const layani_id = 9;

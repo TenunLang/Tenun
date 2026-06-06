@@ -334,6 +334,18 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `pangkat(desimal, desimal): desimal` | perpangkatan | `[JALAN]` |
 | `mutlak(desimal): desimal` | nilai mutlak | `[JALAN]` |
 | `bulatkan(desimal): bulat` | pembulatan ke `bulat` | `[JALAN]` |
+| `eksp(desimal): desimal` | eksponensial e^x | `[JALAN]` |
+| `ln(desimal): desimal` | logaritma natural | `[JALAN]` |
+| `log(desimal): desimal` | logaritma basis 10 | `[JALAN]` |
+| `sin(desimal): desimal` | sinus (radian) | `[JALAN]` |
+| `cos(desimal): desimal` | kosinus (radian) | `[JALAN]` |
+| `tan(desimal): desimal` | tangen (radian) | `[JALAN]` |
+| `tanh(desimal): desimal` | tangen hiperbolik | `[JALAN]` |
+| `lantai(desimal): desimal` | pembulatan ke bawah (floor) | `[JALAN]` |
+| `langit(desimal): desimal` | pembulatan ke atas (ceil) | `[JALAN]` |
+| `acakDesimal(): desimal` | bilangan acak desimal [0,1) | `[JALAN]` |
+| `desimalDari(bulat): desimal` | konversi `bulat` ke `desimal` | `[JALAN]` |
+| `bulatDari(desimal): bulat` | konversi `desimal` ke `bulat` (truncate) | `[JALAN]` |
 | `bacaFile(path: teks): teks` | baca isi file | `[JALAN]` |
 | `tulisFile(path: teks, isi: teks): kosong` | tulis isi ke file | `[JALAN]` |
 | `ambil(url: teks): teks` | HTTP/HTTPS GET (TLS otomatis) | `[JALAN]` |

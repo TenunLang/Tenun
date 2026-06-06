@@ -1015,6 +1015,18 @@ const VM = struct {
             },
             79 => .{ .bulat = fs.ukuran(args[0].teks) },
             80 => .{ .bool = fs.apakahDir(args[0].teks) },
+            81 => .{ .desimal = @exp(args[0].desimal) },
+            82 => .{ .desimal = @log(args[0].desimal) },
+            83 => .{ .desimal = @log10(args[0].desimal) },
+            84 => .{ .desimal = @sin(args[0].desimal) },
+            85 => .{ .desimal = @cos(args[0].desimal) },
+            86 => .{ .desimal = @tan(args[0].desimal) },
+            87 => .{ .desimal = std.math.tanh(args[0].desimal) },
+            88 => .{ .desimal = @floor(args[0].desimal) },
+            89 => .{ .desimal = @ceil(args[0].desimal) },
+            90 => .{ .desimal = std.crypto.random.float(f64) },
+            91 => .{ .desimal = @floatFromInt(args[0].bulat) },
+            92 => .{ .bulat = @intFromFloat(@trunc(args[0].desimal)) },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk Value.kosong;
