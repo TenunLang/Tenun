@@ -320,6 +320,8 @@ fungsi tambah(a: bulat, b: bulat): bulat {
 | `acakAngka(min: bulat, max: bulat): bulat` | bilangan acak [min,max) | `[JALAN]` |
 | `infoOS(kunci: teks): teks` | info OS (nama/arch/host/pengguna/cpu/cwd/temp) | `[JALAN]` |
 | `lingkungan(nama: teks): teks` | variabel lingkungan | `[JALAN]` |
+| `jalankan(perintah: teks): teks` | jalankan perintah shell -> stdout | `[JALAN]` |
+| `daftarBerkas(dir): []teks` / `buatDir` / `hapusBerkas` / `hapusDir` / `ukuranBerkas` / `apakahDir` | operasi berkas & direktori | `[JALAN]` |
 | `pangkas`/`keBesar`/`keKecil`/`keDesimal` | util teks | `[JALAN]` |
 | `httpKirim(metode, url, header, body: teks): teks` | HTTP request (TLS auto utk https) | `[JALAN]` |
 | `sambungAman(inang: teks, port: bulat): bulat` | sambung soket TLS, kembalikan handle | `[JALAN]` |

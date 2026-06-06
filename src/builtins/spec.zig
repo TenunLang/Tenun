@@ -85,6 +85,13 @@ pub const list = [_]Spec{
     .{ .name = "waktuMili", .params = &.{}, .ret = .bulat },
     .{ .name = "infoOS", .params = &.{.teks}, .ret = .teks },
     .{ .name = "lingkungan", .params = &.{.teks}, .ret = .teks },
+    .{ .name = "jalankan", .params = &.{.teks}, .ret = .teks },
+    .{ .name = "daftarBerkas", .params = &.{.teks}, .ret = teks_array },
+    .{ .name = "buatDir", .params = &.{.teks}, .ret = .kosong },
+    .{ .name = "hapusBerkas", .params = &.{.teks}, .ret = .kosong },
+    .{ .name = "hapusDir", .params = &.{.teks}, .ret = .kosong },
+    .{ .name = "ukuranBerkas", .params = &.{.teks}, .ret = .bulat },
+    .{ .name = "apakahDir", .params = &.{.teks}, .ret = .bool },
 };
 
 pub const layani_id = 9;

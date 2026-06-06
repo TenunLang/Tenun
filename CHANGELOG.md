@@ -2,6 +2,10 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-06 — exec + operasi berkas/dir
+
+- `jalankan(perintah)` (74) jalankan shell -> stdout (builtins/proses.zig). `daftarBerkas`(75)/`buatDir`(76)/`hapusBerkas`(77)/`hapusDir`(78)/`ukuranBerkas`(79)/`apakahDir`(80) (fs.zig). Total builtin id 0-80. Dasar modul-proses & modul-berkas.
+
 ## 2026-06-06 — builtin infoOS + lingkungan (info OS)
 
 - `infoOS(kunci)` (72): nama OS/arch/host/pengguna/cpu/cwd/temp. `lingkungan(nama)` (73): env var. builtins/os.zig. Total builtin id 0-73. Dasar modul-os.

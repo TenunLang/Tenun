@@ -14,6 +14,7 @@ const siar = @import("../builtins/siar.zig");
 const argv = @import("../builtins/argv.zig");
 const waktu = @import("../builtins/waktu.zig");
 const os = @import("../builtins/os.zig");
+const proses = @import("../builtins/proses.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -993,6 +994,27 @@ const VM = struct {
             71 => .{ .bulat = std.time.milliTimestamp() },
             72 => .{ .teks = os.info(a, args[0].teks) catch return self.rt("gagal infoOS") },
             73 => .{ .teks = os.lingkungan(a, args[0].teks) catch return self.rt("gagal lingkungan") },
+            74 => .{ .teks = proses.jalankan(a, args[0].teks) catch return self.rt("gagal jalankan") },
+            75 => blk: {
+                const list = fs.daftar(a, args[0].teks) catch return self.rt("gagal daftar berkas");
+                const arr = a.alloc(Value, list.len) catch return self.rt("kehabisan memori");
+                for (list, 0..) |s, i| arr[i] = .{ .teks = s };
+                break :blk Value{ .array = arr };
+            },
+            76 => blk: {
+                fs.buatDir(args[0].teks);
+                break :blk Value.kosong;
+            },
+            77 => blk: {
+                fs.hapusBerkas(args[0].teks);
+                break :blk Value.kosong;
+            },
+            78 => blk: {
+                fs.hapusDir(args[0].teks);
+                break :blk Value.kosong;
+            },
+            79 => .{ .bulat = fs.ukuran(args[0].teks) },
+            80 => .{ .bool = fs.apakahDir(args[0].teks) },
             10 => blk: {
                 self.resp_status = @intCast(args[0].bulat);
                 break :blk Value.kosong;
