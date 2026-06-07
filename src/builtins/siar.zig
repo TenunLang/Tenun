@@ -35,8 +35,7 @@ pub fn broadcast(data: []const u8) void {
     defer mutex.unlock();
     for (streams.items) |x| {
         if (x) |s| {
-            // Pakai send() Winsock/posix (bukan WriteFile std.net) agar pengiriman
-            // lintas-thread (broadcast dari koneksi lain) tersampaikan di Windows.
+            // Winsock send() (bukan WriteFile) supaya pengiriman lintas-thread sampai di Windows.
             var off: usize = 0;
             while (off < data.len) {
                 const w = std.posix.send(s.handle, data[off..], 0) catch break;

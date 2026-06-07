@@ -1256,7 +1256,8 @@ const VM = struct {
     }
 
     fn handleConn(self: *VM, conn: std.net.Server.Connection, tangani_idx: usize) void {
-        defer conn.stream.close();
+        var keep_open = false;
+        defer if (!keep_open) conn.stream.close();
         var buf: [65536]u8 = undefined;
         var hs = std.http.Server.init(conn, &buf);
         var req = hs.receiveHead() catch return;
@@ -1281,6 +1282,25 @@ const VM = struct {
                 self.req_header_count += 1;
             }
         }
+        // Deteksi upgrade WebSocket -> layani di proses & port yang sama.
+        var ws_upgrade = false;
+        var ws_key: ?[]const u8 = null;
+        {
+            var i: usize = 0;
+            while (i < self.req_header_count) : (i += 1) {
+                const hn = self.req_headers[i].name;
+                const hv = self.req_headers[i].value;
+                if (std.ascii.eqlIgnoreCase(hn, "upgrade") and std.ascii.indexOfIgnoreCase(hv, "websocket") != null) ws_upgrade = true;
+                if (std.ascii.eqlIgnoreCase(hn, "sec-websocket-key")) ws_key = hv;
+            }
+        }
+        if (ws_upgrade) {
+            if (ws_key) |k| {
+                if (wsUpgrade(conn.stream, k)) keep_open = true; // reader thread memiliki stream
+                return;
+            }
+        }
+
         const res = self.callTenunFn(tangani_idx, &.{ .{ .teks = metode }, .{ .teks = path }, .{ .teks = badan } }) catch Value.kosong;
         const body = if (std.meta.activeTag(res) == .teks) res.teks else "";
         req.respond(body, .{
@@ -1326,6 +1346,120 @@ const VM = struct {
         return error.RuntimeError;
     }
 };
+
+// ---- WebSocket di port HTTP yang sama (broadcast lewat registry siar) ----
+
+fn wsReadExact(stream: std.net.Stream, buf: []u8) bool {
+    var off: usize = 0;
+    while (off < buf.len) {
+        const n = std.posix.recv(stream.handle, buf[off..], 0) catch return false;
+        if (n == 0) return false;
+        off += n;
+    }
+    return true;
+}
+
+// Baca satu frame WS. Kembalikan payload teks/biner, atau null bila tutup/error.
+fn wsReadFrame(stream: std.net.Stream, a: std.mem.Allocator) ?[]u8 {
+    var h: [2]u8 = undefined;
+    if (!wsReadExact(stream, &h)) return null;
+    const opcode: u8 = h[0] & 0x0f;
+    const masked: bool = (h[1] & 0x80) != 0;
+    var len: u64 = @as(u64, h[1] & 0x7f);
+    if (len == 126) {
+        var e: [2]u8 = undefined;
+        if (!wsReadExact(stream, &e)) return null;
+        len = (@as(u64, e[0]) << 8) | @as(u64, e[1]);
+    } else if (len == 127) {
+        var e: [8]u8 = undefined;
+        if (!wsReadExact(stream, &e)) return null;
+        len = 0;
+        for (e) |b| len = (len << 8) | @as(u64, b);
+    }
+    var mask: [4]u8 = .{ 0, 0, 0, 0 };
+    if (masked) {
+        if (!wsReadExact(stream, &mask)) return null;
+    }
+    if (len > 16 * 1024 * 1024) return null;
+    const payload = a.alloc(u8, @intCast(len)) catch return null;
+    if (!wsReadExact(stream, payload)) return null;
+    if (masked) {
+        var i: usize = 0;
+        while (i < payload.len) : (i += 1) payload[i] ^= mask[i % 4];
+    }
+    if (opcode == 0x8) return null; // close
+    if (opcode == 0x9 or opcode == 0xA) return wsReadFrame(stream, a); // ping/pong -> abaikan
+    return payload;
+}
+
+// Bangun frame teks server->klien (tanpa mask).
+fn wsTextFrame(a: std.mem.Allocator, payload: []const u8) ?[]u8 {
+    var hdr: [10]u8 = undefined;
+    var hlen: usize = 0;
+    hdr[0] = 0x81;
+    if (payload.len < 126) {
+        hdr[1] = @intCast(payload.len);
+        hlen = 2;
+    } else if (payload.len < 65536) {
+        hdr[1] = 126;
+        hdr[2] = @intCast((payload.len >> 8) & 0xff);
+        hdr[3] = @intCast(payload.len & 0xff);
+        hlen = 4;
+    } else {
+        hdr[1] = 127;
+        var i: usize = 0;
+        while (i < 8) : (i += 1) hdr[2 + i] = @intCast((payload.len >> @intCast((7 - i) * 8)) & 0xff);
+        hlen = 10;
+    }
+    const out = a.alloc(u8, hlen + payload.len) catch return null;
+    @memcpy(out[0..hlen], hdr[0..hlen]);
+    @memcpy(out[hlen..], payload);
+    return out;
+}
+
+const WsCtx = struct { stream: std.net.Stream, id: i64 };
+
+// Loop baca frame WS + broadcast. Jalan di thread sendiri (hanya baca soket
+// masuk + kirim broadcast; tak ada koneksi keluar -> aman lintas-thread).
+fn wsReaderLoop(ctx: WsCtx) void {
+    const a = std.heap.page_allocator;
+    defer {
+        siar.unregister(ctx.id);
+        ctx.stream.close();
+    }
+    while (true) {
+        const msg = wsReadFrame(ctx.stream, a) orelse break;
+        defer a.free(msg);
+        if (wsTextFrame(a, msg)) |frame| {
+            defer a.free(frame);
+            siar.broadcast(frame);
+        }
+    }
+}
+
+// Handshake WS lalu serahkan koneksi ke thread pembaca. Kembalikan true bila
+// stream diambil-alih (worker tak boleh menutupnya). Worker langsung bebas lagi.
+fn wsUpgrade(stream: std.net.Stream, key: []const u8) bool {
+    var sha = std.crypto.hash.Sha1.init(.{});
+    sha.update(key);
+    sha.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+    var digest: [20]u8 = undefined;
+    sha.final(&digest);
+    var accbuf: [40]u8 = undefined;
+    const acc = std.base64.standard.Encoder.encode(&accbuf, &digest);
+
+    var respbuf: [200]u8 = undefined;
+    const resp = std.fmt.bufPrint(&respbuf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {s}\r\n\r\n", .{acc}) catch return false;
+    stream.writeAll(resp) catch return false;
+
+    const id = siar.register(stream);
+    const ctx = WsCtx{ .stream = stream, .id = id };
+    _ = std.Thread.spawn(.{}, wsReaderLoop, .{ctx}) catch {
+        siar.unregister(id);
+        return false;
+    };
+    return true;
+}
 
 const WorkerCtx = struct {
     allocator: std.mem.Allocator,

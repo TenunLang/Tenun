@@ -2,6 +2,12 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-07 — WebSocket di port HTTP yang sama (layani)
+
+- `layani` kini deteksi header `Upgrade: websocket` -> handshake (SHA1+base64) lalu serahkan koneksi ke thread pembaca per-koneksi (baca frame + broadcast via registry siar). Web + WebSocket satu proses, satu port. Frontend cukup `ws://host:<port-http>`. Tak perlu `layaniSoket` terpisah untuk chat.
+- Implementasi vm.zig (wsUpgrade/wsReaderLoop/wsReadFrame/wsTextFrame) + siar.broadcast. linkLibC untuk Winsock recv/send.
+- Catatan: di Linux (soket blocking biasa) broadcast antar-klien jalan penuh. Di Windows, pengiriman lintas-thread ke soket klien lain belum tersampaikan (kuirk std.net IOCP) — handshake & echo ke pengirim jalan; perlu rework lapisan soket (soket non-overlapped) untuk broadcast penuh di Windows.
+
 ## 2026-06-06 — TENUN_WORKERS (jumlah worker server konfigurabel)
 
 - `layani(port)` (VM) baca env `TENUN_WORKERS` (default = jumlah CPU). Set `TENUN_WORKERS=1` untuk app yang memakai koneksi soket persisten (DB/Redis) — tiap proses pegang soket sendiri; skalakan via banyak proses + load balancer (model ala PHP-FPM). Soket builtin (`sambung`/`kirim`/`terima`) bersifat per-VM, jadi tak aman dibagi antar worker-thread.

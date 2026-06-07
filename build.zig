@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe.root_module.addOptions("build_options", build_options);
+    exe.linkLibC(); // Winsock send() lintas-thread untuk broadcast WebSocket
     if (target.result.os.tag == .windows) {
         exe.addWin32ResourceFile(.{ .file = b.path("app.rc") });
     }
