@@ -326,7 +326,7 @@ fn cariUji(allocator: std.mem.Allocator, path: []const u8, out: *std.array_list.
 
 // Direktori yang dilewati saat menelusuri (dependensi & artefak build).
 fn lewatiNama(name: []const u8) bool {
-    const skip = [_][]const u8{ ".git", "node_modules", "zig-out", ".zig-cache" };
+    const skip = [_][]const u8{ ".git", "tenun_modul", "node_modules", "zig-out", ".zig-cache" };
     for (skip) |s| if (std.mem.eql(u8, name, s)) return true;
     return false;
 }
