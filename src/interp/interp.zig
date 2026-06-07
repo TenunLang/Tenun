@@ -1,6 +1,8 @@
 const std = @import("std");
+const rt = @import("../rt.zig");
 const ast = @import("../parser/ast.zig");
 const Diagnostics = @import("../diagnostics/diagnostics.zig").Diagnostics;
+const sock = @import("../builtins/sock.zig");
 const http = @import("../builtins/http.zig");
 const spec = @import("../builtins/spec.zig");
 const text = @import("../builtins/text.zig");
@@ -35,10 +37,10 @@ pub const Error = anyerror;
 pub const Interpreter = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     functions: std.StringHashMap(*ast.Stmt),
     global: Scope,
-    locals: std.ArrayList(Scope),
+    locals: std.array_list.Managed(Scope),
     vals: std.heap.ArenaAllocator,
     returning: bool = false,
     breaking: bool = false,
@@ -50,18 +52,18 @@ pub const Interpreter = struct {
     resp_header_count: usize = 0,
     req_headers: [64]std.http.Header = undefined,
     req_header_count: usize = 0,
-    conns: std.ArrayList(?std.net.Stream),
+    conns: std.array_list.Managed(?*sock.Conn),
 
-    pub fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter) Interpreter {
+    pub fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: *std.Io.Writer) Interpreter {
         return .{
             .allocator = allocator,
             .diags = diags,
             .out = out,
             .functions = std.StringHashMap(*ast.Stmt).init(allocator),
             .global = Scope.init(allocator),
-            .locals = std.ArrayList(Scope).init(allocator),
+            .locals = std.array_list.Managed(Scope).init(allocator),
             .vals = std.heap.ArenaAllocator.init(allocator),
-            .conns = std.ArrayList(?std.net.Stream).init(allocator),
+            .conns = std.array_list.Managed(?*sock.Conn).init(allocator),
         };
     }
 
@@ -71,7 +73,7 @@ pub const Interpreter = struct {
         for (self.locals.items) |*sc| sc.deinit();
         self.locals.deinit();
         self.vals.deinit();
-        for (self.conns.items) |c| if (c) |s| s.close();
+        for (self.conns.items) |c| if (c) |s| sock.close(self.allocator, s);
         self.conns.deinit();
     }
 
@@ -381,7 +383,7 @@ pub const Interpreter = struct {
     fn invokeUser(self: *Interpreter, fn_stmt: *ast.Stmt, arg_values: []const Value) Error!Value {
         const f = fn_stmt.data.fungsi_decl;
         const saved = self.locals;
-        self.locals = std.ArrayList(Scope).init(self.allocator);
+        self.locals = std.array_list.Managed(Scope).init(self.allocator);
         defer {
             for (self.locals.items) |*sc| sc.deinit();
             self.locals.deinit();
@@ -414,22 +416,26 @@ pub const Interpreter = struct {
     fn serveSoket(self: *Interpreter, port: u16) Error!Value {
         const z = ast.Pos{ .line = 0, .column = 0 };
         const fn_stmt = self.functions.get("koneksi") orelse return self.runtimeError(z, "server soket butuh fungsi 'koneksi(soket: bulat): kosong'");
-        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.runtimeError(z, "alamat tidak valid");
-        var net_server = addr.listen(.{ .reuse_address = true }) catch return self.runtimeError(z, "gagal mendengarkan di port");
-        std.io.getStdErr().writer().print("[tenun] server soket di port {d}\n", .{port}) catch {};
+        const addr = std.Io.net.IpAddress.parseIp4("0.0.0.0", port) catch return self.runtimeError(z, "alamat tidak valid");
+        var net_server = addr.listen(rt.io, .{ .reuse_address = true }) catch return self.runtimeError(z, "gagal mendengarkan di port");
+        rt.galat("[tenun] server soket di port {d}\n", .{port});
         while (true) {
-            const conn = net_server.accept() catch continue;
-            self.conns.append(conn.stream) catch {
-                conn.stream.close();
+            const stream = net_server.accept(rt.io) catch continue;
+            const conn = sock.wrap(self.allocator, stream) catch {
+                stream.close(rt.io);
+                continue;
+            };
+            self.conns.append(conn) catch {
+                sock.close(self.allocator, conn);
                 continue;
             };
             const handle: i64 = @intCast(self.conns.items.len - 1);
-            const bid = siar.register(conn.stream);
+            const bid = siar.register(stream);
             _ = self.invokeUser(fn_stmt, &.{.{ .bulat = handle }}) catch {};
             siar.unregister(bid);
             const idx: usize = @intCast(handle);
             if (self.conns.items[idx]) |s| {
-                s.close();
+                sock.close(self.allocator, s);
                 self.conns.items[idx] = null;
             }
         }
@@ -439,25 +445,25 @@ pub const Interpreter = struct {
     fn serve(self: *Interpreter, port: u16) Error!Value {
         const z = ast.Pos{ .line = 0, .column = 0 };
         const fn_stmt = self.functions.get("tangani") orelse return self.runtimeError(z, "server butuh fungsi 'tangani(metode: teks, jalur: teks, badan: teks): teks'");
-        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.runtimeError(z, "alamat tidak valid");
-        var net_server = addr.listen(.{ .reuse_address = true }) catch return self.runtimeError(z, "gagal mendengarkan di port");
-        std.io.getStdErr().writer().print("[tenun] server berjalan di http://localhost:{d}\n", .{port}) catch {};
+        const addr = std.Io.net.IpAddress.parseIp4("0.0.0.0", port) catch return self.runtimeError(z, "alamat tidak valid");
+        var net_server = addr.listen(rt.io, .{ .reuse_address = true }) catch return self.runtimeError(z, "gagal mendengarkan di port");
+        rt.galat("[tenun] server berjalan di http://localhost:{d}\n", .{port});
         while (true) {
-            const conn = net_server.accept() catch continue;
-            var buf: [65536]u8 = undefined;
-            var hs = std.http.Server.init(conn, &buf);
-            var req = hs.receiveHead() catch {
-                conn.stream.close();
-                continue;
-            };
+            const stream = net_server.accept(rt.io) catch continue;
+            defer stream.close(rt.io);
+            var rbuf: [65536]u8 = undefined;
+            var wbuf: [65536]u8 = undefined;
+            var sreader = stream.reader(rt.io, &rbuf);
+            var swriter = stream.writer(rt.io, &wbuf);
+            var hs = std.http.Server.init(&sreader.interface, &swriter.interface);
+            var req = hs.receiveHead() catch continue;
+
             const a = self.vals.allocator();
             const metode = a.dupe(u8, @tagName(req.head.method)) catch "GET";
             const path = a.dupe(u8, req.head.target) catch "/";
-            var badan: []const u8 = "";
-            if (req.reader()) |reader| {
-                badan = reader.readAllAlloc(a, 16 * 1024 * 1024) catch "";
-            } else |_| {}
 
+            // Tangkap header request SEBELUM baca badan: readerExpectNone
+            // meng-invalidasi string di Head.
             self.resp_status = 200;
             self.resp_header_count = 0;
             self.req_header_count = 0;
@@ -471,13 +477,18 @@ pub const Interpreter = struct {
                     self.req_header_count += 1;
                 }
             }
+
+            var bbuf: [65536]u8 = undefined;
+            var badan: []const u8 = "";
+            const body_reader = req.readerExpectNone(&bbuf);
+            badan = body_reader.allocRemaining(a, std.Io.Limit.limited(16 * 1024 * 1024)) catch "";
+
             const res = self.invokeUser(fn_stmt, &.{ .{ .teks = metode }, .{ .teks = path }, .{ .teks = badan } }) catch Value.kosong;
             const body = if (std.meta.activeTag(res) == .teks) res.teks else "";
             req.respond(body, .{
                 .status = @enumFromInt(self.resp_status),
                 .extra_headers = self.resp_headers[0..self.resp_header_count],
             }) catch {};
-            conn.stream.close();
         }
     }
 
@@ -507,19 +518,19 @@ pub const Interpreter = struct {
                 for (argv.list, 0..) |s, i| arr[i] = .{ .teks = s };
                 break :blk .{ .array = arr };
             },
-            64 => .{ .bulat = std.time.timestamp() },
+            64 => .{ .bulat = rt.waktuDetik() },
             65 => blk: {
                 const lo = args[0].bulat;
                 const hi = args[1].bulat;
                 if (hi <= lo) break :blk .{ .bulat = lo };
-                break :blk .{ .bulat = std.crypto.random.intRangeLessThan(i64, lo, hi) };
+                break :blk .{ .bulat = rt.acakRentang(lo, hi) };
             },
             66 => .{ .desimal = std.fmt.parseFloat(f64, std.mem.trim(u8, args[0].teks, " \t\r\n")) catch 0 },
             67 => .{ .teks = text.pangkas(a, args[0].teks) catch return self.runtimeError(pos, "gagal pangkas") },
             68 => .{ .teks = text.keBesar(a, args[0].teks) catch return self.runtimeError(pos, "gagal keBesar") },
             69 => .{ .teks = text.keKecil(a, args[0].teks) catch return self.runtimeError(pos, "gagal keKecil") },
             70 => .{ .teks = waktu.tanggal(a, args[0].bulat, args[1].bulat) catch return self.runtimeError(pos, "gagal tanggal") },
-            71 => .{ .bulat = std.time.milliTimestamp() },
+            71 => .{ .bulat = rt.waktuMili() },
             72 => .{ .teks = os.info(a, args[0].teks) catch return self.runtimeError(pos, "gagal infoOS") },
             73 => .{ .teks = os.lingkungan(a, args[0].teks) catch return self.runtimeError(pos, "gagal lingkungan") },
             74 => .{ .teks = proses.jalankan(a, args[0].teks) catch return self.runtimeError(pos, "gagal jalankan") },
@@ -552,7 +563,7 @@ pub const Interpreter = struct {
             87 => .{ .desimal = std.math.tanh(args[0].desimal) },
             88 => .{ .desimal = @floor(args[0].desimal) },
             89 => .{ .desimal = @ceil(args[0].desimal) },
-            90 => .{ .desimal = std.crypto.random.float(f64) },
+            90 => .{ .desimal = rt.acakFloat() },
             91 => .{ .desimal = @floatFromInt(args[0].bulat) },
             92 => .{ .bulat = @intFromFloat(@trunc(args[0].desimal)) },
             93 => .{ .teks = std.fmt.allocPrint(a, "{d}", .{args[0].desimal}) catch return self.runtimeError(pos, "kehabisan memori") },
@@ -581,7 +592,7 @@ pub const Interpreter = struct {
             },
             15 => blk: {
                 const arr = args[0].array;
-                var buf = std.ArrayList(u8).init(a);
+                var buf = std.array_list.Managed(u8).init(a);
                 for (arr, 0..) |el, i| {
                     if (i > 0) buf.appendSlice(args[1].teks) catch {};
                     buf.appendSlice(el.teks) catch {};
@@ -609,14 +620,14 @@ pub const Interpreter = struct {
                 break :blk .kosong;
             },
             30 => blk: {
-                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch break :blk .{ .bulat = -1 };
-                self.conns.append(stream) catch return self.runtimeError(pos, "kehabisan memori");
+                const conn = sock.connect(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch break :blk .{ .bulat = -1 };
+                self.conns.append(conn) catch return self.runtimeError(pos, "kehabisan memori");
                 break :blk .{ .bulat = @intCast(self.conns.items.len - 1) };
             },
             31 => blk: {
                 const sid: usize = @intCast(args[0].bulat);
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    s.writeAll(args[1].teks) catch return self.runtimeError(pos, "gagal mengirim");
+                    sock.send(s, args[1].teks) catch return self.runtimeError(pos, "gagal mengirim");
                 };
                 break :blk .kosong;
             },
@@ -626,14 +637,14 @@ pub const Interpreter = struct {
                 const buf = a.alloc(u8, maks) catch return self.runtimeError(pos, "kehabisan memori");
                 var n: usize = 0;
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    n = s.read(buf) catch 0;
+                    n = sock.recv(s, buf);
                 };
                 break :blk .{ .teks = buf[0..n] };
             },
             33 => blk: {
                 const sid: usize = @intCast(args[0].bulat);
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    s.close();
+                    sock.close(self.allocator, s);
                     self.conns.items[sid] = null;
                 };
                 break :blk .kosong;
@@ -655,11 +666,7 @@ pub const Interpreter = struct {
                 const buf = a.alloc(u8, n) catch return self.runtimeError(pos, "kehabisan memori");
                 var got: usize = 0;
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    while (got < n) {
-                        const r = s.read(buf[got..]) catch break;
-                        if (r == 0) break;
-                        got += r;
-                    }
+                    got = sock.recvExact(s, buf);
                 };
                 break :blk .{ .teks = buf[0..got] };
             },
@@ -813,14 +820,18 @@ fn runToString(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
     try sema.check(allocator, program, &diags);
     try std.testing.expect(!diags.hasErrors());
 
-    var buf = std.ArrayList(u8).init(allocator);
-    errdefer buf.deinit();
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    rt.io = threaded.io();
 
-    var interp = Interpreter.init(allocator, &diags, buf.writer().any());
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    errdefer aw.deinit();
+
+    var interp = Interpreter.init(allocator, &diags, &aw.writer);
     defer interp.deinit();
     try interp.run(program);
 
-    return buf.toOwnedSlice();
+    return aw.toOwnedSlice();
 }
 
 fn expectOutput(source: []const u8, expected: []const u8) !void {

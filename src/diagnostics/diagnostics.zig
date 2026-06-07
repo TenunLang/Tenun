@@ -11,12 +11,12 @@ pub const Diagnostic = struct {
 
 pub const Diagnostics = struct {
     allocator: std.mem.Allocator,
-    items: std.ArrayList(Diagnostic),
+    items: std.array_list.Managed(Diagnostic),
 
     pub fn init(allocator: std.mem.Allocator) Diagnostics {
         return .{
             .allocator = allocator,
-            .items = std.ArrayList(Diagnostic).init(allocator),
+            .items = std.array_list.Managed(Diagnostic).init(allocator),
         };
     }
 

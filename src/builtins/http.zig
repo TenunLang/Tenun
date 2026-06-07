@@ -1,32 +1,18 @@
 const std = @import("std");
+const rt = @import("../rt.zig");
 
 pub fn get(allocator: std.mem.Allocator, url: []const u8) ![]u8 {
-    var client = std.http.Client{ .allocator = allocator };
-    defer client.deinit();
-
-    var body = std.ArrayList(u8).init(allocator);
-    errdefer body.deinit();
-
-    _ = try client.fetch(.{
-        .location = .{ .url = url },
-        .response_storage = .{ .dynamic = &body },
-        .max_append_size = 64 * 1024 * 1024,
-    });
-
-    return body.toOwnedSlice();
+    return kirim(allocator, "GET", url, "", "");
 }
 
 // HTTP request umum dengan metode/header/body. TLS otomatis (https) via std.http.Client.
 // headerRaw: baris "Nama: Nilai" dipisah '\n'. body: kosong = tanpa payload.
 // Kembalikan badan respons.
 pub fn kirim(allocator: std.mem.Allocator, metode: []const u8, url: []const u8, headerRaw: []const u8, body: []const u8) ![]u8 {
-    var client = std.http.Client{ .allocator = allocator };
+    var client = std.http.Client{ .allocator = allocator, .io = rt.io };
     defer client.deinit();
 
-    var resp = std.ArrayList(u8).init(allocator);
-    errdefer resp.deinit();
-
-    var headers = std.ArrayList(std.http.Header).init(allocator);
+    var headers = std.array_list.Managed(std.http.Header).init(allocator);
     defer headers.deinit();
     var it = std.mem.splitScalar(u8, headerRaw, '\n');
     while (it.next()) |line0| {
@@ -49,14 +35,21 @@ pub fn kirim(allocator: std.mem.Allocator, metode: []const u8, url: []const u8, 
     else
         .GET;
 
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    errdefer aw.deinit();
+
+    // Buffer dekompresi supaya respons ber-gzip/deflate bisa dibaca.
+    const dbuf = try allocator.alloc(u8, std.compress.flate.max_window_len);
+    defer allocator.free(dbuf);
+
     _ = try client.fetch(.{
         .location = .{ .url = url },
         .method = m,
         .extra_headers = headers.items,
         .payload = if (body.len > 0) body else null,
-        .response_storage = .{ .dynamic = &resp },
-        .max_append_size = 64 * 1024 * 1024,
+        .response_writer = &aw.writer,
+        .decompress_buffer = dbuf,
     });
 
-    return resp.toOwnedSlice();
+    return aw.toOwnedSlice();
 }

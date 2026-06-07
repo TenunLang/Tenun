@@ -1,6 +1,8 @@
 const std = @import("std");
+const runtime = @import("../rt.zig");
 const ast = @import("../parser/ast.zig");
 const Diagnostics = @import("../diagnostics/diagnostics.zig").Diagnostics;
+const sock = @import("../builtins/sock.zig");
 const http = @import("../builtins/http.zig");
 const spec = @import("../builtins/spec.zig");
 const text = @import("../builtins/text.zig");
@@ -75,11 +77,11 @@ pub const OpCode = enum(u8) {
 };
 
 const Chunk = struct {
-    code: std.ArrayList(u8),
-    consts: std.ArrayList(Value),
+    code: std.array_list.Managed(u8),
+    consts: std.array_list.Managed(Value),
 
     fn init(allocator: std.mem.Allocator) Chunk {
-        return .{ .code = std.ArrayList(u8).init(allocator), .consts = std.ArrayList(Value).init(allocator) };
+        return .{ .code = std.array_list.Managed(u8).init(allocator), .consts = std.array_list.Managed(Value).init(allocator) };
     }
     fn deinit(self: *Chunk) void {
         self.code.deinit();
@@ -122,29 +124,29 @@ const FnCompiler = struct {
 // Konteks loop untuk henti (break) & lanjut (continue).
 const LoopCtx = struct {
     base_locals: usize,
-    break_jumps: std.ArrayList(usize),
+    break_jumps: std.array_list.Managed(usize),
     cont_backward: bool, // selama: lanjut lompat mundur ke cond
     cont_target: usize, // dipakai bila cont_backward
-    cont_jumps: std.ArrayList(usize), // untuk: lanjut lompat maju ke increment
+    cont_jumps: std.array_list.Managed(usize), // untuk: lanjut lompat maju ke increment
 };
 
 const Compiler = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
-    functions: std.ArrayList(Function),
+    functions: std.array_list.Managed(Function),
     fn_index: std.StringHashMap(usize),
     global_index: std.StringHashMap(u16),
-    loops: std.ArrayList(LoopCtx),
+    loops: std.array_list.Managed(LoopCtx),
     cur: *FnCompiler = undefined,
 
     fn init(allocator: std.mem.Allocator, diags: *Diagnostics) Compiler {
         return .{
             .allocator = allocator,
             .diags = diags,
-            .functions = std.ArrayList(Function).init(allocator),
+            .functions = std.array_list.Managed(Function).init(allocator),
             .fn_index = std.StringHashMap(usize).init(allocator),
             .global_index = std.StringHashMap(u16).init(allocator),
-            .loops = std.ArrayList(LoopCtx).init(allocator),
+            .loops = std.array_list.Managed(LoopCtx).init(allocator),
         };
     }
     fn deinit(self: *Compiler) void {
@@ -267,10 +269,10 @@ const Compiler = struct {
                 try c.emitOp(.pop);
                 try self.loops.append(.{
                     .base_locals = self.cur.local_count,
-                    .break_jumps = std.ArrayList(usize).init(self.allocator),
+                    .break_jumps = std.array_list.Managed(usize).init(self.allocator),
                     .cont_backward = true,
                     .cont_target = loop_start,
-                    .cont_jumps = std.ArrayList(usize).init(self.allocator),
+                    .cont_jumps = std.array_list.Managed(usize).init(self.allocator),
                 });
                 try self.block(d.body);
                 try self.emitLoop(loop_start);
@@ -292,10 +294,10 @@ const Compiler = struct {
                 try c.emitOp(.pop);
                 try self.loops.append(.{
                     .base_locals = self.cur.local_count,
-                    .break_jumps = std.ArrayList(usize).init(self.allocator),
+                    .break_jumps = std.array_list.Managed(usize).init(self.allocator),
                     .cont_backward = false,
                     .cont_target = 0,
-                    .cont_jumps = std.ArrayList(usize).init(self.allocator),
+                    .cont_jumps = std.array_list.Managed(usize).init(self.allocator),
                 });
                 try self.block(d.body);
                 // Titik 'lanjut' (continue): increment i.
@@ -342,10 +344,10 @@ const Compiler = struct {
                 try c.emitOp(.pop);
                 try self.loops.append(.{
                     .base_locals = self.cur.local_count,
-                    .break_jumps = std.ArrayList(usize).init(self.allocator),
+                    .break_jumps = std.array_list.Managed(usize).init(self.allocator),
                     .cont_backward = false,
                     .cont_target = 0,
-                    .cont_jumps = std.ArrayList(usize).init(self.allocator),
+                    .cont_jumps = std.array_list.Managed(usize).init(self.allocator),
                 });
                 try self.block(d.body);
                 for (self.loops.items[self.loops.items.len - 1].cont_jumps.items) |cj| try self.patchJump(cj);
@@ -386,7 +388,7 @@ const Compiler = struct {
                 self.beginScope();
                 try self.expr(d.subject);
                 const slot = self.declareLocal("$cocok");
-                var endJumps = std.ArrayList(usize).init(self.allocator);
+                var endJumps = std.array_list.Managed(usize).init(self.allocator);
                 defer endJumps.deinit();
                 for (d.arms) |arm| {
                     try self.emitGetLocal(slot);
@@ -635,11 +637,11 @@ const stack_max = 1 << 16;
 const VM = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     functions: []Function,
     stack: []Value,
     top: usize,
-    frames: std.ArrayList(Frame),
+    frames: std.array_list.Managed(Frame),
     global_slots: []Value,
     vals: std.heap.ArenaAllocator,
     resp_status: u16 = 200,
@@ -647,11 +649,11 @@ const VM = struct {
     resp_header_count: usize = 0,
     req_headers: [64]std.http.Header = undefined,
     req_header_count: usize = 0,
-    conns: std.ArrayList(?std.net.Stream),
-    handlers: std.ArrayList(Handler),
+    conns: std.array_list.Managed(?*sock.Conn),
+    handlers: std.array_list.Managed(Handler),
     last_error: []const u8 = "",
 
-    fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: std.io.AnyWriter, functions: []Function, num_globals: usize) !VM {
+    fn init(allocator: std.mem.Allocator, diags: *Diagnostics, out: *std.Io.Writer, functions: []Function, num_globals: usize) !VM {
         const slots = try allocator.alloc(Value, num_globals);
         for (slots) |*g| g.* = .kosong;
         return .{
@@ -661,11 +663,11 @@ const VM = struct {
             .functions = functions,
             .stack = try allocator.alloc(Value, stack_max),
             .top = 0,
-            .frames = std.ArrayList(Frame).init(allocator),
+            .frames = std.array_list.Managed(Frame).init(allocator),
             .global_slots = slots,
             .vals = std.heap.ArenaAllocator.init(allocator),
-            .conns = std.ArrayList(?std.net.Stream).init(allocator),
-            .handlers = std.ArrayList(Handler).init(allocator),
+            .conns = std.array_list.Managed(?*sock.Conn).init(allocator),
+            .handlers = std.array_list.Managed(Handler).init(allocator),
         };
     }
     fn deinit(self: *VM) void {
@@ -673,7 +675,7 @@ const VM = struct {
         self.frames.deinit();
         self.allocator.free(self.global_slots);
         self.vals.deinit();
-        for (self.conns.items) |c| if (c) |s| s.close();
+        for (self.conns.items) |c| if (c) |s| sock.close(self.allocator, s);
         self.conns.deinit();
         self.handlers.deinit();
     }
@@ -980,19 +982,19 @@ const VM = struct {
                 for (argv.list, 0..) |s, i| arr[i] = .{ .teks = s };
                 break :blk Value{ .array = arr };
             },
-            64 => .{ .bulat = std.time.timestamp() },
+            64 => .{ .bulat = runtime.waktuDetik() },
             65 => blk: {
                 const lo = args[0].bulat;
                 const hi = args[1].bulat;
                 if (hi <= lo) break :blk Value{ .bulat = lo };
-                break :blk Value{ .bulat = std.crypto.random.intRangeLessThan(i64, lo, hi) };
+                break :blk Value{ .bulat = runtime.acakRentang(lo, hi) };
             },
             66 => .{ .desimal = std.fmt.parseFloat(f64, std.mem.trim(u8, args[0].teks, " \t\r\n")) catch 0 },
             67 => .{ .teks = text.pangkas(a, args[0].teks) catch return self.rt("gagal pangkas") },
             68 => .{ .teks = text.keBesar(a, args[0].teks) catch return self.rt("gagal keBesar") },
             69 => .{ .teks = text.keKecil(a, args[0].teks) catch return self.rt("gagal keKecil") },
             70 => .{ .teks = waktu.tanggal(a, args[0].bulat, args[1].bulat) catch return self.rt("gagal tanggal") },
-            71 => .{ .bulat = std.time.milliTimestamp() },
+            71 => .{ .bulat = runtime.waktuMili() },
             72 => .{ .teks = os.info(a, args[0].teks) catch return self.rt("gagal infoOS") },
             73 => .{ .teks = os.lingkungan(a, args[0].teks) catch return self.rt("gagal lingkungan") },
             74 => .{ .teks = proses.jalankan(a, args[0].teks) catch return self.rt("gagal jalankan") },
@@ -1025,7 +1027,7 @@ const VM = struct {
             87 => .{ .desimal = std.math.tanh(args[0].desimal) },
             88 => .{ .desimal = @floor(args[0].desimal) },
             89 => .{ .desimal = @ceil(args[0].desimal) },
-            90 => .{ .desimal = std.crypto.random.float(f64) },
+            90 => .{ .desimal = runtime.acakFloat() },
             91 => .{ .desimal = @floatFromInt(args[0].bulat) },
             92 => .{ .bulat = @intFromFloat(@trunc(args[0].desimal)) },
             93 => .{ .teks = std.fmt.allocPrint(a, "{d}", .{args[0].desimal}) catch return self.rt("kehabisan memori") },
@@ -1054,7 +1056,7 @@ const VM = struct {
             },
             15 => blk: {
                 const arr = args[0].array;
-                var buf = std.ArrayList(u8).init(a);
+                var buf = std.array_list.Managed(u8).init(a);
                 for (arr, 0..) |el, i| {
                     if (i > 0) buf.appendSlice(args[1].teks) catch {};
                     buf.appendSlice(el.teks) catch {};
@@ -1082,14 +1084,14 @@ const VM = struct {
                 break :blk Value.kosong;
             },
             30 => blk: {
-                const stream = std.net.tcpConnectToHost(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch break :blk Value{ .bulat = -1 };
-                self.conns.append(stream) catch return self.rt("kehabisan memori");
+                const conn = sock.connect(self.allocator, args[0].teks, @intCast(args[1].bulat)) catch break :blk Value{ .bulat = -1 };
+                self.conns.append(conn) catch return self.rt("kehabisan memori");
                 break :blk Value{ .bulat = @intCast(self.conns.items.len - 1) };
             },
             31 => blk: {
                 const sid: usize = @intCast(args[0].bulat);
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    s.writeAll(args[1].teks) catch return self.rt("gagal mengirim");
+                    sock.send(s, args[1].teks) catch return self.rt("gagal mengirim");
                 };
                 break :blk Value.kosong;
             },
@@ -1099,14 +1101,14 @@ const VM = struct {
                 const buf = a.alloc(u8, maks) catch return self.rt("kehabisan memori");
                 var n: usize = 0;
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    n = s.read(buf) catch 0;
+                    n = sock.recv(s, buf);
                 };
                 break :blk Value{ .teks = buf[0..n] };
             },
             33 => blk: {
                 const sid: usize = @intCast(args[0].bulat);
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    s.close();
+                    sock.close(self.allocator, s);
                     self.conns.items[sid] = null;
                 };
                 break :blk Value.kosong;
@@ -1128,11 +1130,7 @@ const VM = struct {
                 const buf = a.alloc(u8, n) catch return self.rt("kehabisan memori");
                 var got: usize = 0;
                 if (sid < self.conns.items.len) if (self.conns.items[sid]) |s| {
-                    while (got < n) {
-                        const r = s.read(buf[got..]) catch break;
-                        if (r == 0) break;
-                        got += r;
-                    }
+                    got = sock.recvExact(s, buf);
                 };
                 break :blk Value{ .teks = buf[0..got] };
             },
@@ -1193,24 +1191,22 @@ const VM = struct {
         };
         // Port: env TENUN_PORT bila ada (untuk deploy/reverse-proxy), selain itu argumen.
         var port: u16 = port_arg;
-        if (std.process.getEnvVarOwned(self.allocator, "TENUN_PORT")) |pv| {
-            defer self.allocator.free(pv);
+        if (runtime.getenv("TENUN_PORT")) |pv| {
             if (std.fmt.parseInt(u16, std.mem.trim(u8, pv, " \t\r\n"), 10)) |p| port = p else |_| {}
-        } else |_| {}
-        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
-        var listener = addr.listen(.{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
+        }
+        const addr = std.Io.net.IpAddress.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
+        var listener = addr.listen(runtime.io, .{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
 
         // Jumlah worker: env TENUN_WORKERS bila ada, selain itu jumlah CPU.
         // Set TENUN_WORKERS=1 untuk app yang memakai koneksi soket (DB/Redis) per
         // proses; skalakan dengan menjalankan banyak proses di belakang load balancer.
         var workers = @max(@as(usize, 1), std.Thread.getCpuCount() catch 4);
-        if (std.process.getEnvVarOwned(self.allocator, "TENUN_WORKERS")) |wv| {
-            defer self.allocator.free(wv);
+        if (runtime.getenv("TENUN_WORKERS")) |wv| {
             if (std.fmt.parseInt(usize, std.mem.trim(u8, wv, " \t\r\n"), 10)) |n| {
                 if (n >= 1) workers = n;
             } else |_| {}
-        } else |_| {}
-        std.io.getStdErr().writer().print("[tenun] server berjalan di http://localhost:{d} ({d} worker)\n", .{ port, workers }) catch {};
+        }
+        runtime.galat("[tenun] server berjalan di http://localhost:{d} ({d} worker)\n", .{ port, workers });
 
         const ctx = WorkerCtx{
             .allocator = self.allocator,
@@ -1239,12 +1235,12 @@ const VM = struct {
             }
             return self.rt("server soket butuh fungsi 'koneksi(soket: bulat): kosong'");
         };
-        const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
-        var listener = addr.listen(.{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
-        std.io.getStdErr().writer().print("[tenun] server soket di port {d}\n", .{port}) catch {};
+        const addr = std.Io.net.IpAddress.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
+        var listener = addr.listen(runtime.io, .{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
+        runtime.galat("[tenun] server soket di port {d}\n", .{port});
 
         while (true) {
-            const conn = listener.accept() catch continue;
+            const stream = listener.accept(runtime.io) catch continue;
             const ctx = SoketConnCtx{
                 .allocator = self.allocator,
                 .diags = self.diags,
@@ -1252,29 +1248,29 @@ const VM = struct {
                 .functions = self.functions,
                 .koneksi_idx = koneksi_idx,
                 .src_globals = self.global_slots,
-                .stream = conn.stream,
+                .stream = stream,
             };
             _ = std.Thread.spawn(.{}, soketConnLoop, .{ctx}) catch {
-                conn.stream.close();
+                stream.close(runtime.io);
             };
         }
         return .kosong;
     }
 
-    fn handleConn(self: *VM, conn: std.net.Server.Connection, tangani_idx: usize) void {
+    fn handleConn(self: *VM, stream: std.Io.net.Stream, tangani_idx: usize) void {
         var keep_open = false;
-        defer if (!keep_open) conn.stream.close();
-        var buf: [65536]u8 = undefined;
-        var hs = std.http.Server.init(conn, &buf);
+        defer if (!keep_open) stream.close(runtime.io);
+        var rbuf: [65536]u8 = undefined;
+        var wbuf: [65536]u8 = undefined;
+        var sreader = stream.reader(runtime.io, &rbuf);
+        var swriter = stream.writer(runtime.io, &wbuf);
+        var hs = std.http.Server.init(&sreader.interface, &swriter.interface);
         var req = hs.receiveHead() catch return;
         const a = self.vals.allocator();
         const metode = a.dupe(u8, @tagName(req.head.method)) catch "GET";
         const path = a.dupe(u8, req.head.target) catch "/";
-        var badan: []const u8 = "";
-        if (req.reader()) |reader| {
-            badan = reader.readAllAlloc(a, 16 * 1024 * 1024) catch "";
-        } else |_| {}
 
+        // Tangkap header request SEBELUM baca badan (readerExpectNone meng-invalidasi Head).
         self.resp_status = 200;
         self.resp_header_count = 0;
         self.req_header_count = 0;
@@ -1302,10 +1298,14 @@ const VM = struct {
         }
         if (ws_upgrade) {
             if (ws_key) |k| {
-                if (wsUpgrade(conn.stream, k)) keep_open = true; // reader thread memiliki stream
+                if (wsUpgrade(stream, k)) keep_open = true; // reader thread memiliki stream
                 return;
             }
         }
+
+        var bbuf: [65536]u8 = undefined;
+        const body_reader = req.readerExpectNone(&bbuf);
+        const badan = body_reader.allocRemaining(a, std.Io.Limit.limited(16 * 1024 * 1024)) catch "";
 
         const res = self.callTenunFn(tangani_idx, &.{ .{ .teks = metode }, .{ .teks = path }, .{ .teks = badan } }) catch Value.kosong;
         const body = if (std.meta.activeTag(res) == .teks) res.teks else "";
@@ -1355,46 +1355,41 @@ const VM = struct {
 
 // ---- WebSocket di port HTTP yang sama (broadcast lewat registry siar) ----
 
-fn wsReadExact(stream: std.net.Stream, buf: []u8) bool {
-    var off: usize = 0;
-    while (off < buf.len) {
-        const n = std.posix.recv(stream.handle, buf[off..], 0) catch return false;
-        if (n == 0) return false;
-        off += n;
-    }
+fn wsReadExact(r: *std.Io.Reader, buf: []u8) bool {
+    r.readSliceAll(buf) catch return false;
     return true;
 }
 
 // Baca satu frame WS. Kembalikan payload teks/biner, atau null bila tutup/error.
-fn wsReadFrame(stream: std.net.Stream, a: std.mem.Allocator) ?[]u8 {
+fn wsReadFrame(r: *std.Io.Reader, a: std.mem.Allocator) ?[]u8 {
     var h: [2]u8 = undefined;
-    if (!wsReadExact(stream, &h)) return null;
+    if (!wsReadExact(r, &h)) return null;
     const opcode: u8 = h[0] & 0x0f;
     const masked: bool = (h[1] & 0x80) != 0;
     var len: u64 = @as(u64, h[1] & 0x7f);
     if (len == 126) {
         var e: [2]u8 = undefined;
-        if (!wsReadExact(stream, &e)) return null;
+        if (!wsReadExact(r, &e)) return null;
         len = (@as(u64, e[0]) << 8) | @as(u64, e[1]);
     } else if (len == 127) {
         var e: [8]u8 = undefined;
-        if (!wsReadExact(stream, &e)) return null;
+        if (!wsReadExact(r, &e)) return null;
         len = 0;
         for (e) |b| len = (len << 8) | @as(u64, b);
     }
     var mask: [4]u8 = .{ 0, 0, 0, 0 };
     if (masked) {
-        if (!wsReadExact(stream, &mask)) return null;
+        if (!wsReadExact(r, &mask)) return null;
     }
     if (len > 16 * 1024 * 1024) return null;
     const payload = a.alloc(u8, @intCast(len)) catch return null;
-    if (!wsReadExact(stream, payload)) return null;
+    if (!wsReadExact(r, payload)) return null;
     if (masked) {
         var i: usize = 0;
         while (i < payload.len) : (i += 1) payload[i] ^= mask[i % 4];
     }
     if (opcode == 0x8) return null; // close
-    if (opcode == 0x9 or opcode == 0xA) return wsReadFrame(stream, a); // ping/pong -> abaikan
+    if (opcode == 0x9 or opcode == 0xA) return wsReadFrame(r, a); // ping/pong -> abaikan
     return payload;
 }
 
@@ -1423,7 +1418,7 @@ fn wsTextFrame(a: std.mem.Allocator, payload: []const u8) ?[]u8 {
     return out;
 }
 
-const WsCtx = struct { stream: std.net.Stream, id: i64 };
+const WsCtx = struct { stream: std.Io.net.Stream, id: i64 };
 
 // Loop baca frame WS + broadcast. Jalan di thread sendiri (hanya baca soket
 // masuk + kirim broadcast; tak ada koneksi keluar -> aman lintas-thread).
@@ -1431,10 +1426,13 @@ fn wsReaderLoop(ctx: WsCtx) void {
     const a = std.heap.page_allocator;
     defer {
         siar.unregister(ctx.id);
-        ctx.stream.close();
+        ctx.stream.close(runtime.io);
     }
+    var rbuf: [16 * 1024]u8 = undefined;
+    var sr = ctx.stream.reader(runtime.io, &rbuf);
+    const r = &sr.interface;
     while (true) {
-        const msg = wsReadFrame(ctx.stream, a) orelse break;
+        const msg = wsReadFrame(r, a) orelse break;
         defer a.free(msg);
         if (wsTextFrame(a, msg)) |frame| {
             defer a.free(frame);
@@ -1445,7 +1443,7 @@ fn wsReaderLoop(ctx: WsCtx) void {
 
 // Handshake WS lalu serahkan koneksi ke thread pembaca. Kembalikan true bila
 // stream diambil-alih (worker tak boleh menutupnya). Worker langsung bebas lagi.
-fn wsUpgrade(stream: std.net.Stream, key: []const u8) bool {
+fn wsUpgrade(stream: std.Io.net.Stream, key: []const u8) bool {
     var sha = std.crypto.hash.Sha1.init(.{});
     sha.update(key);
     sha.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
@@ -1456,7 +1454,10 @@ fn wsUpgrade(stream: std.net.Stream, key: []const u8) bool {
 
     var respbuf: [200]u8 = undefined;
     const resp = std.fmt.bufPrint(&respbuf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {s}\r\n\r\n", .{acc}) catch return false;
-    stream.writeAll(resp) catch return false;
+    var wbuf: [256]u8 = undefined;
+    var sw = stream.writer(runtime.io, &wbuf);
+    sw.interface.writeAll(resp) catch return false;
+    sw.interface.flush() catch return false;
 
     const id = siar.register(stream);
     const ctx = WsCtx{ .stream = stream, .id = id };
@@ -1470,32 +1471,36 @@ fn wsUpgrade(stream: std.net.Stream, key: []const u8) bool {
 const WorkerCtx = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     functions: []Function,
     tangani_idx: usize,
     src_globals: []Value,
-    listener: *std.net.Server,
+    listener: *std.Io.net.Server,
 };
 
 const SoketConnCtx = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
-    out: std.io.AnyWriter,
+    out: *std.Io.Writer,
     functions: []Function,
     koneksi_idx: usize,
     src_globals: []Value,
-    stream: std.net.Stream,
+    stream: std.Io.net.Stream,
 };
 
 fn soketConnLoop(ctx: SoketConnCtx) void {
     var vm = VM.init(ctx.allocator, ctx.diags, ctx.out, ctx.functions, ctx.src_globals.len) catch {
-        ctx.stream.close();
+        ctx.stream.close(runtime.io);
         return;
     };
     defer vm.deinit(); // menutup semua conns termasuk stream ini
     @memcpy(vm.global_slots, ctx.src_globals);
-    vm.conns.append(ctx.stream) catch {
-        ctx.stream.close();
+    const conn = sock.wrap(ctx.allocator, ctx.stream) catch {
+        ctx.stream.close(runtime.io);
+        return;
+    };
+    vm.conns.append(conn) catch {
+        sock.close(ctx.allocator, conn);
         return;
     };
     const bid = siar.register(ctx.stream);
@@ -1509,8 +1514,8 @@ fn workerLoop(ctx: WorkerCtx) void {
     defer vm.deinit();
     @memcpy(vm.global_slots, ctx.src_globals);
     while (true) {
-        const conn = ctx.listener.accept() catch continue;
-        vm.handleConn(conn, ctx.tangani_idx);
+        const stream = ctx.listener.accept(runtime.io) catch continue;
+        vm.handleConn(stream, ctx.tangani_idx);
         _ = vm.vals.reset(.retain_capacity);
     }
 }
@@ -1540,7 +1545,7 @@ fn valueEql(a: Value, b: Value) bool {
     };
 }
 
-pub fn run(allocator: std.mem.Allocator, program: ast.Program, diags: *Diagnostics, out: std.io.AnyWriter) !void {
+pub fn run(allocator: std.mem.Allocator, program: ast.Program, diags: *Diagnostics, out: *std.Io.Writer) !void {
     var compiler = Compiler.init(allocator, diags);
     defer compiler.deinit();
     try compiler.compileProgram(program);
@@ -1569,10 +1574,14 @@ fn runToString(allocator: std.mem.Allocator, source: []const u8) ![]u8 {
     try sema.check(allocator, program, &diags);
     try std.testing.expect(!diags.hasErrors());
 
-    var buf = std.ArrayList(u8).init(allocator);
-    errdefer buf.deinit();
-    try run(allocator, program, &diags, buf.writer().any());
-    return buf.toOwnedSlice();
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    runtime.io = threaded.io();
+
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    errdefer aw.deinit();
+    try run(allocator, program, &diags, &aw.writer);
+    return aw.toOwnedSlice();
 }
 
 fn expectOutput(source: []const u8, expected: []const u8) !void {

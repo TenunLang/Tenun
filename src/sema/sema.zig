@@ -19,7 +19,7 @@ pub fn check(allocator: std.mem.Allocator, program: ast.Program, diags: *Diagnos
         .allocator = allocator,
         .diags = diags,
         .functions = std.StringHashMap(FnSig).init(allocator),
-        .scopes = std.ArrayList(std.StringHashMap(VarInfo)).init(allocator),
+        .scopes = std.array_list.Managed(std.StringHashMap(VarInfo)).init(allocator),
         .type_arena = std.heap.ArenaAllocator.init(allocator),
     };
     defer s.deinit();
@@ -52,7 +52,7 @@ const Sema = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
     functions: std.StringHashMap(FnSig),
-    scopes: std.ArrayList(std.StringHashMap(VarInfo)),
+    scopes: std.array_list.Managed(std.StringHashMap(VarInfo)),
     type_arena: std.heap.ArenaAllocator,
     loop_depth: usize = 0,
 

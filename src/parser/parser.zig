@@ -9,7 +9,7 @@ pub const Error = error{ParseError} || std.mem.Allocator.Error;
 
 pub fn parse(arena: std.mem.Allocator, tokens: []const Token, diags: *Diagnostics) Error!ast.Program {
     var p = Parser{ .tokens = tokens, .diags = diags, .arena = arena };
-    var list = std.ArrayList(*ast.Stmt).init(arena);
+    var list = std.array_list.Managed(*ast.Stmt).init(arena);
     while (!p.check(.eof)) {
         const s = try p.declaration();
         try list.append(s);
@@ -51,7 +51,7 @@ const Parser = struct {
         const name = try self.expect(.identifier, "harap nama fungsi");
         _ = try self.expect(.lparen, "harap '(' setelah nama fungsi");
 
-        var params = std.ArrayList(ast.Param).init(self.arena);
+        var params = std.array_list.Managed(ast.Param).init(self.arena);
         if (!self.check(.rparen)) {
             while (true) {
                 const pname = try self.expect(.identifier, "harap nama parameter");
@@ -155,7 +155,7 @@ const Parser = struct {
         const kw = self.advance();
         const subject = try self.expression();
         _ = try self.expect(.lbrace, "harap '{' setelah ekspresi 'cocok'");
-        var arms = std.ArrayList(ast.Stmt.MatchArm).init(self.arena);
+        var arms = std.array_list.Managed(ast.Stmt.MatchArm).init(self.arena);
         var default: ?[]*ast.Stmt = null;
         while (!self.check(.rbrace) and !self.check(.eof)) {
             if (self.match(.kw_lain)) {
@@ -206,7 +206,7 @@ const Parser = struct {
 
     fn block(self: *Parser) Error![]*ast.Stmt {
         _ = try self.expect(.lbrace, "harap '{' membuka blok");
-        var list = std.ArrayList(*ast.Stmt).init(self.arena);
+        var list = std.array_list.Managed(*ast.Stmt).init(self.arena);
         while (!self.check(.rbrace) and !self.check(.eof)) {
             try list.append(try self.declaration());
         }
@@ -409,7 +409,7 @@ const Parser = struct {
         while (true) {
             if (self.check(.lparen)) {
                 _ = self.advance();
-                var args = std.ArrayList(*ast.Expr).init(self.arena);
+                var args = std.array_list.Managed(*ast.Expr).init(self.arena);
                 if (!self.check(.rparen)) {
                     while (true) {
                         try args.append(try self.expression());
@@ -463,7 +463,7 @@ const Parser = struct {
             },
             .lbracket => {
                 _ = self.advance();
-                var elems = std.ArrayList(*ast.Expr).init(self.arena);
+                var elems = std.array_list.Managed(*ast.Expr).init(self.arena);
                 if (!self.check(.rbracket)) {
                     while (true) {
                         try elems.append(try self.expression());
@@ -477,7 +477,7 @@ const Parser = struct {
                 // literal peta: peta{ "kunci": nilai, ... }
                 _ = self.advance();
                 _ = try self.expect(.lbrace, "harap '{' setelah 'peta'");
-                var entries = std.ArrayList(ast.Expr.MapEntry).init(self.arena);
+                var entries = std.array_list.Managed(ast.Expr.MapEntry).init(self.arena);
                 if (!self.check(.rbrace)) {
                     while (true) {
                         const key = try self.expression();
@@ -499,7 +499,7 @@ const Parser = struct {
 
     fn decodeString(self: *Parser, lexeme: []const u8) Error![]const u8 {
         const content = lexeme[1 .. lexeme.len - 1];
-        var buf = std.ArrayList(u8).init(self.arena);
+        var buf = std.array_list.Managed(u8).init(self.arena);
         var i: usize = 0;
         while (i < content.len) {
             if (content[i] == '\\' and i + 1 < content.len) {
@@ -606,10 +606,10 @@ fn parseToSexpr(allocator: std.mem.Allocator, source: []const u8, diags: *Diagno
 
     const program = try parse(arena.allocator(), tokens, diags);
 
-    var buf = std.ArrayList(u8).init(allocator);
-    errdefer buf.deinit();
-    try ast.dumpProgram(program, buf.writer());
-    return buf.toOwnedSlice();
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    errdefer aw.deinit();
+    try ast.dumpProgram(program, &aw.writer);
+    return aw.toOwnedSlice();
 }
 
 fn expectParse(source: []const u8, expected: []const u8) !void {

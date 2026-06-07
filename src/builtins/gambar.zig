@@ -1,4 +1,5 @@
 const std = @import("std");
+const rt = @import("../rt.zig");
 
 fn be32(b: []const u8) u32 {
     return (@as(u32, b[0]) << 24) | (@as(u32, b[1]) << 16) | (@as(u32, b[2]) << 8) | @as(u32, b[3]);
@@ -17,7 +18,7 @@ fn paeth(a: i32, b: i32, c: i32) i32 {
 // Dekode PNG 8-bit (grayscale/RGB/RGBA/grayscale+alpha/palette) menjadi
 // teks "lebar tinggi g0 g1 ..." dengan nilai grayscale 0-255 (row-major).
 pub fn bacaPng(a: std.mem.Allocator, path: []const u8) ![]u8 {
-    const data = try std.fs.cwd().readFileAlloc(a, path, 1 << 30);
+    const data = try std.Io.Dir.cwd().readFileAlloc(rt.io, path, a, std.Io.Limit.limited(1 << 30));
     defer a.free(data);
 
     if (data.len < 8 or data[0] != 0x89 or data[1] != 'P' or data[2] != 'N' or data[3] != 'G')
@@ -29,7 +30,7 @@ pub fn bacaPng(a: std.mem.Allocator, path: []const u8) ![]u8 {
     var color_type: u8 = 0;
     var palette: []u8 = &[_]u8{};
 
-    var idat = std.ArrayList(u8).init(a);
+    var idat = std.array_list.Managed(u8).init(a);
     defer idat.deinit();
 
     var pos: usize = 8;
@@ -66,11 +67,12 @@ pub fn bacaPng(a: std.mem.Allocator, path: []const u8) ![]u8 {
         else => return error.ColorTypeTakDidukung,
     };
 
-    // inflate IDAT
-    var in_stream = std.io.fixedBufferStream(idat.items);
-    var raw = std.ArrayList(u8).init(a);
-    defer raw.deinit();
-    try std.compress.zlib.decompress(in_stream.reader(), raw.writer());
+    // inflate IDAT (zlib container) -> byte mentah ber-filter
+    var zr: std.Io.Reader = .fixed(idat.items);
+    var win: [std.compress.flate.max_window_len]u8 = undefined;
+    var decomp = std.compress.flate.Decompress.init(&zr, .zlib, &win);
+    const raw_bytes = try decomp.reader.allocRemaining(a, .unlimited);
+    defer a.free(raw_bytes);
 
     const w: usize = width;
     const h: usize = height;
@@ -84,10 +86,10 @@ pub fn bacaPng(a: std.mem.Allocator, path: []const u8) ![]u8 {
     var ri: usize = 0;
     var y: usize = 0;
     while (y < h) : (y += 1) {
-        if (ri >= raw.items.len) return error.DataKurang;
-        const filter = raw.items[ri];
+        if (ri >= raw_bytes.len) return error.DataKurang;
+        const filter = raw_bytes[ri];
         ri += 1;
-        const line = raw.items[ri .. ri + stride];
+        const line = raw_bytes[ri .. ri + stride];
         ri += stride;
         const cur = out[y * stride .. y * stride + stride];
 
@@ -111,7 +113,7 @@ pub fn bacaPng(a: std.mem.Allocator, path: []const u8) ![]u8 {
     }
 
     // grayscale + serialisasi "W H v v ..."
-    var sb = std.ArrayList(u8).init(a);
+    var sb = std.array_list.Managed(u8).init(a);
     errdefer sb.deinit();
     var buf: [16]u8 = undefined;
     try sb.appendSlice(try std.fmt.bufPrint(&buf, "{d} {d}", .{ width, height }));

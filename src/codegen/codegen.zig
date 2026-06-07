@@ -15,10 +15,10 @@ pub fn generate(allocator: std.mem.Allocator, program: ast.Program, diags: *Diag
     var g = Codegen{
         .allocator = allocator,
         .diags = diags,
-        .out = std.ArrayList(u8).init(allocator),
+        .out = std.array_list.Managed(u8).init(allocator),
         .functions = std.StringHashMap(FnSig).init(allocator),
         .globals = std.StringHashMap(Type).init(allocator),
-        .scopes = std.ArrayList(std.StringHashMap(Type)).init(allocator),
+        .scopes = std.array_list.Managed(std.StringHashMap(Type)).init(allocator),
         .type_arena = std.heap.ArenaAllocator.init(allocator),
     };
     defer g.deinit();
@@ -31,10 +31,10 @@ pub fn generate(allocator: std.mem.Allocator, program: ast.Program, diags: *Diag
 const Codegen = struct {
     allocator: std.mem.Allocator,
     diags: *Diagnostics,
-    out: std.ArrayList(u8),
+    out: std.array_list.Managed(u8),
     functions: std.StringHashMap(FnSig),
     globals: std.StringHashMap(Type),
-    scopes: std.ArrayList(std.StringHashMap(Type)),
+    scopes: std.array_list.Managed(std.StringHashMap(Type)),
     type_arena: std.heap.ArenaAllocator,
     depth: i32 = 0,
 

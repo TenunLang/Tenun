@@ -1,4 +1,5 @@
 const std = @import("std");
+const rt = @import("../rt.zig");
 
 fn toHex(a: std.mem.Allocator, bytes: []const u8) ![]u8 {
     const digits = "0123456789abcdef";
@@ -51,7 +52,7 @@ pub fn base64Dekode(a: std.mem.Allocator, data: []const u8) ![]u8 {
 
 pub fn acak(a: std.mem.Allocator, n: usize) ![]u8 {
     const raw = try a.alloc(u8, n);
-    std.crypto.random.bytes(raw);
+    rt.io.random(raw);
     return toHex(a, raw);
 }
 

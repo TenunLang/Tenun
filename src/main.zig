@@ -1,18 +1,19 @@
 const std = @import("std");
 const driver = @import("driver.zig");
+const rt = @import("rt.zig");
 const build_options = @import("build_options");
 
 pub const version = build_options.version;
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    rt.io = init.io;
+    rt.env_map = init.environ_map;
+    const allocator = std.heap.c_allocator;
 
-    const raw = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, raw);
+    const arena = init.arena.allocator();
+    const raw = try init.minimal.args.toSlice(arena);
 
-    var args = std.ArrayList([]const u8).init(allocator);
+    var args = std.array_list.Managed([]const u8).init(allocator);
     defer args.deinit();
     for (raw[1..]) |a| try args.append(a);
 
@@ -20,12 +21,14 @@ pub fn main() !void {
 }
 
 fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
 
     // Tanpa argumen: jalankan index.tenun bila ada, selain itu tampilkan bantuan.
     if (args.len < 1) {
-        if (std.fs.cwd().access("index.tenun", .{})) {
+        if (std.Io.Dir.cwd().access(rt.io, "index.tenun", .{})) {
             try driver.run(allocator, "index.tenun", true, &.{});
         } else |_| {
             try printUsage(stdout);
@@ -45,7 +48,7 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
     } else if (std.mem.eql(u8, cmd, "run")) {
         var path: ?[]const u8 = null;
         var use_vm = true;
-        var prog = std.ArrayList([]const u8).init(allocator);
+        var prog = std.array_list.Managed([]const u8).init(allocator);
         defer prog.deinit();
         for (args[1..]) |arg| {
             if (path == null) {
@@ -72,7 +75,7 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
         };
         defer allocator.free(baris);
         // Pecah skrip jadi token + tambah argumen ekstra, lalu jalankan ulang.
-        var tok = std.ArrayList([]const u8).init(allocator);
+        var tok = std.array_list.Managed([]const u8).init(allocator);
         defer tok.deinit();
         var it = std.mem.tokenizeScalar(u8, baris, ' ');
         while (it.next()) |t| try tok.append(t);
@@ -89,6 +92,12 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
         } else {
             try stderr.print("error: 'tenun fmt' membutuhkan path file\n", .{});
         }
+    } else if (std.mem.eql(u8, cmd, "check")) {
+        const path: []const u8 = if (args.len >= 2) args[1] else ".";
+        const bad = try driver.check(allocator, path);
+        stdout.flush() catch {};
+        stderr.flush() catch {};
+        if (bad > 0) std.process.exit(1);
     } else if (std.mem.eql(u8, cmd, "repl")) {
         try driver.repl(allocator);
     } else if (std.mem.eql(u8, cmd, "build")) {
@@ -104,7 +113,7 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
         }
     } else if (std.mem.endsWith(u8, cmd, ".tenun")) {
         // `tenun <file.tenun> [arg...]` — jalankan berkas langsung (tanpa "run").
-        var prog = std.ArrayList([]const u8).init(allocator);
+        var prog = std.array_list.Managed([]const u8).init(allocator);
         defer prog.deinit();
         for (args[1..]) |a| try prog.append(a);
         try driver.run(allocator, cmd, true, prog.items);
@@ -129,6 +138,7 @@ fn printUsage(writer: anytype) !void {
         \\  tenun build <file> --emit-c   simpan juga sumber C perantara
         \\  tenun fmt <file>       rapikan format kode (tulis ke file)
         \\  tenun fmt <file> --stdout   cetak hasil rapi ke layar
+        \\  tenun check [path]     periksa format semua .tenun (default ".", untuk CI)
         \\  tenun repl             mode interaktif (REPL)
         \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
         \\
@@ -138,7 +148,7 @@ fn printUsage(writer: anytype) !void {
 }
 
 test {
-    std.testing.refAllDeclsRecursive(@This());
+    std.testing.refAllDecls(@This());
     _ = @import("driver.zig");
     _ = @import("diagnostics/diagnostics.zig");
     _ = @import("lexer/token.zig");

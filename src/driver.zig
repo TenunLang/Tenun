@@ -1,4 +1,5 @@
 ﻿const std = @import("std");
+const rt = @import("rt.zig");
 const Diagnostics = @import("diagnostics/diagnostics.zig").Diagnostics;
 const Lexer = @import("lexer/lexer.zig").Lexer;
 const parser = @import("parser/parser.zig");
@@ -8,6 +9,10 @@ const vm = @import("vm/vm.zig");
 const codegen = @import("codegen/codegen.zig");
 const fmt = @import("fmt/fmt.zig");
 const argv = @import("builtins/argv.zig");
+const builtin = @import("builtin");
+
+// Ikon default (Windows) yang ditanam ke binary build.
+const default_ico = @embedFile("logo.ico");
 
 // Baca perintah skrip dari "skrip" di tenun.json (mirip "scripts" npm/bun).
 pub fn bacaSkrip(allocator: std.mem.Allocator, nama: []const u8) ![]u8 {
@@ -32,8 +37,10 @@ pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool, prog_ar
     var diags = Diagnostics.init(allocator);
     defer diags.deinit();
 
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
 
     var lexer = Lexer.init(source, &diags);
     const tokens = try lexer.tokenize(allocator);
@@ -62,7 +69,7 @@ pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool, prog_ar
     }
 
     if (use_vm) {
-        vm.run(allocator, program, &diags, stdout.any()) catch |err| switch (err) {
+        vm.run(allocator, program, &diags, stdout) catch |err| switch (err) {
             error.RuntimeError => {
                 try diags.print(stderr);
                 return;
@@ -72,7 +79,7 @@ pub fn run(allocator: std.mem.Allocator, path: []const u8, use_vm: bool, prog_ar
         return;
     }
 
-    var interp = Interpreter.init(allocator, &diags, stdout.any());
+    var interp = Interpreter.init(allocator, &diags, stdout);
     defer interp.deinit();
     interp.run(program) catch |err| switch (err) {
         error.RuntimeError => {
@@ -90,8 +97,10 @@ pub fn build(allocator: std.mem.Allocator, path: []const u8, keep_c: bool) !void
     var diags = Diagnostics.init(allocator);
     defer diags.deinit();
 
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
 
     var lexer = Lexer.init(source, &diags);
     const tokens = try lexer.tokenize(allocator);
@@ -132,32 +141,80 @@ pub fn build(allocator: std.mem.Allocator, path: []const u8, keep_c: bool) !void
     const exe_path = try std.fmt.allocPrint(allocator, "{s}.exe", .{base});
     defer allocator.free(exe_path);
 
-    {
-        const f = try std.fs.cwd().createFile(c_path, .{});
-        defer f.close();
-        try f.writeAll(c_source);
+    try writeFileAll(c_path, c_source);
+
+    // Ikon aplikasi (Windows): pakai <base>.ico bila ada, selain itu ikon default.
+    var res_path: ?[]const u8 = null;
+    var tmp_ico: ?[]const u8 = null;
+    var rc_path: ?[]const u8 = null;
+    defer {
+        if (tmp_ico) |p| std.Io.Dir.cwd().deleteFile(rt.io, p) catch {};
+        if (rc_path) |p| std.Io.Dir.cwd().deleteFile(rt.io, p) catch {};
+        if (res_path) |p| std.Io.Dir.cwd().deleteFile(rt.io, p) catch {};
+    }
+    if (builtin.os.tag == .windows) {
+        res_path = siapkanIkon(allocator, base, &tmp_ico, &rc_path) catch null;
     }
 
-    var child = std.process.Child.init(&.{ "zig", "cc", c_path, "-O2", "-o", exe_path }, allocator);
-    const term = child.spawnAndWait() catch |err| {
+    var args = std.array_list.Managed([]const u8).init(allocator);
+    defer args.deinit();
+    try args.appendSlice(&.{ "zig", "cc", c_path, "-O2", "-o", exe_path });
+    if (res_path) |rp| try args.append(rp);
+
+    const term = spawnWait(args.items, false) catch |err| {
         try stderr.print("error: gagal menjalankan 'zig cc': {s}\n", .{@errorName(err)});
         return;
     };
-    if (term != .Exited or term.Exited != 0) {
+    if (term != .exited or term.exited != 0) {
         try stderr.print("error: kompilasi C gagal\n", .{});
         return;
     }
 
-    if (!keep_c) std.fs.cwd().deleteFile(c_path) catch {};
+    if (!keep_c) std.Io.Dir.cwd().deleteFile(rt.io, c_path) catch {};
 
     try stdout.print("[tenun] build sukses: {s}\n", .{exe_path});
+}
+
+// Siapkan resource ikon Windows: pakai <base>.ico bila ada, selain itu ikon
+// default bawaan. Hasilkan <base>.rc -> kompilasi `zig rc` -> kembalikan path .res.
+fn siapkanIkon(allocator: std.mem.Allocator, base: []const u8, tmp_ico_out: *?[]const u8, rc_out: *?[]const u8) !?[]const u8 {
+    const user_ico = try std.fmt.allocPrint(allocator, "{s}.ico", .{base});
+    var ico_ref: []const u8 = user_ico;
+    if (std.Io.Dir.cwd().access(rt.io, user_ico, .{})) {
+        // pakai ikon milik pengguna
+    } else |_| {
+        const t = try std.fmt.allocPrint(allocator, "{s}.app.ico", .{base});
+        writeFileAll(t, default_ico) catch return null;
+        tmp_ico_out.* = t;
+        ico_ref = t;
+    }
+
+    const ico_fwd = try allocator.dupe(u8, ico_ref);
+    for (ico_fwd) |*c| if (c.* == '\\') {
+        c.* = '/';
+    };
+
+    const rc = try std.fmt.allocPrint(allocator, "{s}.rc", .{base});
+    {
+        const rc_data = std.fmt.allocPrint(allocator, "1 ICON \"{s}\"\n", .{ico_fwd}) catch return null;
+        defer allocator.free(rc_data);
+        writeFileAll(rc, rc_data) catch return null;
+    }
+    rc_out.* = rc;
+
+    const res = try std.fmt.allocPrint(allocator, "{s}.res", .{base});
+    const term = spawnWait(&.{ "zig", "rc", rc, res }, true) catch return null;
+    if (term != .exited or term.exited != 0) return null;
+    return res;
 }
 
 // Format file .tenun ke bentuk kanonik. write=true menulis kembali ke file,
 // selain itu cetak ke stdout. Tidak meng-expand impor (format satu file saja).
 pub fn fmtFile(allocator: std.mem.Allocator, path: []const u8, write: bool) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
 
     const source = try readFile(allocator, path);
     defer allocator.free(source);
@@ -180,44 +237,150 @@ pub fn fmtFile(allocator: std.mem.Allocator, path: []const u8, write: bool) !voi
         return;
     };
 
-    var buf = std.ArrayList(u8).init(allocator);
-    defer buf.deinit();
-    try fmt.format(program, buf.writer());
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    defer aw.deinit();
+    try fmt.format(program, &aw.writer);
+    const rapi = aw.written();
 
     if (write) {
-        if (std.mem.eql(u8, buf.items, source)) {
+        if (std.mem.eql(u8, rapi, source)) {
             try stdout.print("[tenun fmt] {s} sudah rapi\n", .{path});
             return;
         }
-        const f = try std.fs.cwd().createFile(path, .{});
-        defer f.close();
-        try f.writeAll(buf.items);
+        try writeFileAll(path, rapi);
         try stdout.print("[tenun fmt] {s} dirapikan\n", .{path});
     } else {
-        try stdout.writeAll(buf.items);
+        try stdout.writeAll(rapi);
+    }
+}
+
+// Periksa format seluruh berkas .tenun di bawah `root` (rekursif). Tidak menulis
+// apa pun — hanya melaporkan berkas yang belum rapi atau bergalat sintaks.
+// Mengembalikan jumlah berkas bermasalah (0 = lulus). Dipakai di CI: `tenun check`.
+pub fn check(allocator: std.mem.Allocator, root: []const u8) !usize {
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
+
+    var bad: usize = 0;
+    var total: usize = 0;
+    checkPath(allocator, root, stdout, &bad, &total) catch |err| {
+        try stderr.print("error: gagal memeriksa '{s}': {s}\n", .{ root, @errorName(err) });
+        return 1;
+    };
+
+    if (bad == 0) {
+        try stdout.print("[tenun check] {d} berkas .tenun sudah rapi\n", .{total});
+    } else {
+        try stdout.print("[tenun check] {d}/{d} berkas perlu diformat — jalankan: tenun fmt <berkas>\n", .{ bad, total });
+    }
+    return bad;
+}
+
+fn checkPath(allocator: std.mem.Allocator, path: []const u8, stdout: *std.Io.Writer, bad: *usize, total: *usize) !void {
+    // Berkas tunggal .tenun.
+    if (std.mem.endsWith(u8, path, ".tenun")) {
+        try checkFile(allocator, path, stdout, bad, total);
+        return;
+    }
+    // Selain itu perlakukan sebagai direktori; bila bukan direktori, coba sebagai berkas.
+    var dir = std.Io.Dir.cwd().openDir(rt.io, path, .{ .iterate = true }) catch {
+        try checkFile(allocator, path, stdout, bad, total);
+        return;
+    };
+    defer dir.close(rt.io);
+
+    var it = dir.iterate();
+    while (try it.next(rt.io)) |entry| {
+        if (lewatiNama(entry.name)) continue;
+        const child = try std.fs.path.join(allocator, &.{ path, entry.name });
+        defer allocator.free(child);
+        switch (entry.kind) {
+            .directory => try checkPath(allocator, child, stdout, bad, total),
+            .file => if (std.mem.endsWith(u8, entry.name, ".tenun"))
+                try checkFile(allocator, child, stdout, bad, total),
+            else => {},
+        }
+    }
+}
+
+// Direktori yang dilewati saat menelusuri (dependensi & artefak build).
+fn lewatiNama(name: []const u8) bool {
+    const skip = [_][]const u8{ ".git", "tenun_modul", "node_modules", "zig-out", ".zig-cache" };
+    for (skip) |s| if (std.mem.eql(u8, name, s)) return true;
+    return false;
+}
+
+fn checkFile(allocator: std.mem.Allocator, path: []const u8, stdout: *std.Io.Writer, bad: *usize, total: *usize) !void {
+    total.* += 1;
+    const source = readFile(allocator, path) catch {
+        bad.* += 1;
+        try stdout.print("  galat baca: {s}\n", .{path});
+        return;
+    };
+    defer allocator.free(source);
+
+    var diags = Diagnostics.init(allocator);
+    defer diags.deinit();
+
+    var lexer = Lexer.init(source, &diags);
+    const tokens = lexer.tokenize(allocator) catch {
+        bad.* += 1;
+        try stdout.print("  galat sintaks: {s}\n", .{path});
+        return;
+    };
+    defer allocator.free(tokens);
+    if (diags.hasErrors()) {
+        bad.* += 1;
+        try stdout.print("  galat sintaks: {s}\n", .{path});
+        return;
+    }
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const program = parser.parse(arena.allocator(), tokens, &diags) catch {
+        bad.* += 1;
+        try stdout.print("  galat sintaks: {s}\n", .{path});
+        return;
+    };
+
+    var aw = std.Io.Writer.Allocating.init(allocator);
+    defer aw.deinit();
+    fmt.format(program, &aw.writer) catch {
+        bad.* += 1;
+        try stdout.print("  galat format: {s}\n", .{path});
+        return;
+    };
+
+    if (!std.mem.eql(u8, aw.written(), source)) {
+        bad.* += 1;
+        try stdout.print("  perlu format: {s}\n", .{path});
     }
 }
 
 // REPL: baca baris, jalankan via interpreter, simpan deklarasi antar baris.
 pub fn repl(allocator: std.mem.Allocator) !void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
-    const stdin = std.io.getStdIn().reader();
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
+
+    var in_buf: [64 * 1024]u8 = undefined;
+    var in_file = std.Io.File.stdin().reader(rt.io, &in_buf);
+    const stdin = &in_file.interface;
 
     try stdout.writeAll("Tenun REPL. Ketik kode, baris kosong untuk jalankan, 'keluar' untuk berhenti.\n");
 
     // akumulasi deklarasi (fungsi + biar) supaya tetap ada antar eval
-    var prelude = std.ArrayList(u8).init(allocator);
+    var prelude = std.array_list.Managed(u8).init(allocator);
     defer prelude.deinit();
-
-    var line_buf = std.ArrayList(u8).init(allocator);
-    defer line_buf.deinit();
 
     while (true) {
         try stdout.writeAll("tenun> ");
-        line_buf.clearRetainingCapacity();
-        stdin.streamUntilDelimiter(line_buf.writer(), '\n', null) catch break;
-        const line = std.mem.trim(u8, line_buf.items, " \t\r");
+        try stdout.flush();
+        const line_raw = stdin.takeDelimiterExclusive('\n') catch break;
+        const line = std.mem.trim(u8, line_raw, " \t\r");
         if (line.len == 0) continue;
         if (std.mem.eql(u8, line, "keluar") or std.mem.eql(u8, line, "exit")) break;
 
@@ -230,6 +393,7 @@ pub fn repl(allocator: std.mem.Allocator) !void {
         defer allocator.free(full);
 
         const ok = evalSnippet(allocator, full, stdout, stderr);
+        stdout.flush() catch {};
         if (ok and is_decl) {
             try prelude.appendSlice(line);
             try prelude.append('\n');
@@ -263,7 +427,7 @@ fn evalSnippet(allocator: std.mem.Allocator, source: []const u8, stdout: anytype
         return false;
     }
 
-    var interp = Interpreter.init(allocator, &diags, stdout.any());
+    var interp = Interpreter.init(allocator, &diags, stdout);
     defer interp.deinit();
     interp.run(program) catch {
         diags.print(stderr) catch {};
@@ -273,8 +437,10 @@ fn evalSnippet(allocator: std.mem.Allocator, source: []const u8, stdout: anytype
 }
 
 pub fn add(allocator: std.mem.Allocator, arg: []const u8) anyerror!void {
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
 
     var url: []const u8 = undefined;
     var name: []const u8 = undefined;
@@ -290,17 +456,17 @@ pub fn add(allocator: std.mem.Allocator, arg: []const u8) anyerror!void {
     }
     defer if (std.mem.indexOf(u8, arg, "://") == null) allocator.free(url);
 
-    std.fs.cwd().makePath("tenun_modul") catch {};
+    std.Io.Dir.cwd().createDirPath(rt.io, "tenun_modul") catch {};
     const dest = try std.fmt.allocPrint(allocator, "tenun_modul/{s}", .{name});
     defer allocator.free(dest);
 
     try stdout.print("[tenun] mengambil modul '{s}' dari {s}\n", .{ name, url });
-    var child = std.process.Child.init(&.{ "git", "clone", "--depth", "1", url, dest }, allocator);
-    const term = child.spawnAndWait() catch |err| {
+    stdout.flush() catch {};
+    const term = spawnWait(&.{ "git", "clone", "--depth", "1", url, dest }, false) catch |err| {
         try stderr.print("error: gagal menjalankan git: {s}\n", .{@errorName(err)});
         return;
     };
-    if (term != .Exited or term.Exited != 0) {
+    if (term != .exited or term.exited != 0) {
         try stderr.print("error: gagal mengambil modul '{s}'\n", .{name});
         return;
     }
@@ -326,7 +492,7 @@ fn pasangDependensi(allocator: std.mem.Allocator, name: []const u8) anyerror!voi
     while (it.next()) |entry| {
         const dep = entry.key_ptr.*;
         const destdep = try std.fmt.allocPrint(a, "tenun_modul/{s}", .{dep});
-        if (std.fs.cwd().access(destdep, .{})) {
+        if (std.Io.Dir.cwd().access(rt.io, destdep, .{})) {
             continue; // sudah terpasang
         } else |_| {}
         const dep_owned = try allocator.dupe(u8, dep);
@@ -340,15 +506,15 @@ fn tambahKeManifest(allocator: std.mem.Allocator, name: []const u8) !void {
     defer arena.deinit();
     const a = arena.allocator();
 
-    var root: std.json.Value = .{ .object = std.json.ObjectMap.init(a) };
+    var root: std.json.Value = .{ .object = std.json.ObjectMap.empty };
     if (readFile(a, "tenun.json")) |data| {
         if (std.json.parseFromSliceLeaky(std.json.Value, a, data, .{})) |parsed| {
             if (parsed == .object) root = parsed;
         } else |_| {}
     } else |_| {}
 
-    if (root.object.get("nama") == null) try root.object.put("nama", .{ .string = "proyek-tenun" });
-    if (root.object.get("versi") == null) try root.object.put("versi", .{ .string = "0.1.0" });
+    if (root.object.get("nama") == null) try root.object.put(a, "nama", .{ .string = "proyek-tenun" });
+    if (root.object.get("versi") == null) try root.object.put(a, "versi", .{ .string = "0.1.0" });
 
     // versi modul dari manifest modul
     var versi: []const u8 = "0.1.0";
@@ -364,24 +530,23 @@ fn tambahKeManifest(allocator: std.mem.Allocator, name: []const u8) !void {
     const vstr = try std.fmt.allocPrint(a, "^{s}", .{versi});
     if (root.object.getPtr("butuh")) |bp| {
         if (bp.* == .object) {
-            try bp.object.put(name, .{ .string = vstr });
+            try bp.object.put(a, name, .{ .string = vstr });
         } else {
-            var o = std.json.ObjectMap.init(a);
-            try o.put(name, .{ .string = vstr });
-            try root.object.put("butuh", .{ .object = o });
+            var o = std.json.ObjectMap.empty;
+            try o.put(a, name, .{ .string = vstr });
+            try root.object.put(a, "butuh", .{ .object = o });
         }
     } else {
-        var o = std.json.ObjectMap.init(a);
-        try o.put(name, .{ .string = vstr });
-        try root.object.put("butuh", .{ .object = o });
+        var o = std.json.ObjectMap.empty;
+        try o.put(a, name, .{ .string = vstr });
+        try root.object.put(a, "butuh", .{ .object = o });
     }
 
-    var buf = std.ArrayList(u8).init(a);
-    try std.json.stringify(root, .{ .whitespace = .indent_2 }, buf.writer());
-    try buf.append('\n');
-    const f = try std.fs.cwd().createFile("tenun.json", .{});
-    defer f.close();
-    try f.writeAll(buf.items);
+    var aw = std.Io.Writer.Allocating.init(a);
+    defer aw.deinit();
+    try std.json.Stringify.value(root, .{ .whitespace = .indent_2 }, &aw.writer);
+    try aw.writer.writeByte('\n');
+    try writeFileAll("tenun.json", aw.written());
 }
 
 fn imporLokal(spec: []const u8) bool {
@@ -407,7 +572,7 @@ fn modulEntryPath(allocator: std.mem.Allocator, name: []const u8) ![]u8 {
         } else |_| {}
     }
     const p1 = try std.fmt.allocPrint(allocator, "tenun_modul/{s}/{s}.tenun", .{ name, name });
-    if (std.fs.cwd().access(p1, .{})) {
+    if (std.Io.Dir.cwd().access(rt.io, p1, .{})) {
         return p1;
     } else |_| {}
     allocator.free(p1);
@@ -427,7 +592,7 @@ fn resolveImpor(allocator: std.mem.Allocator, base_dir: []const u8, spec: []cons
     return modulEntryPath(allocator, spec);
 }
 
-fn expand(allocator: std.mem.Allocator, file_path: []const u8, out: *std.ArrayList(u8), seen: *std.StringHashMap(void)) !void {
+fn expand(allocator: std.mem.Allocator, file_path: []const u8, out: *std.array_list.Managed(u8), seen: *std.StringHashMap(void)) !void {
     if (seen.contains(file_path)) return;
     try seen.put(try allocator.dupe(u8, file_path), {});
 
@@ -468,7 +633,7 @@ fn expand(allocator: std.mem.Allocator, file_path: []const u8, out: *std.ArrayLi
 }
 
 fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
+    var out = std.array_list.Managed(u8).init(allocator);
     errdefer out.deinit();
 
     var seen = std.StringHashMap(void).init(allocator);
@@ -483,19 +648,32 @@ fn loadProgram(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
 }
 
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-    return try file.readToEndAlloc(allocator, 16 * 1024 * 1024);
+    return std.Io.Dir.cwd().readFileAlloc(rt.io, path, allocator, std.Io.Limit.limited(16 * 1024 * 1024));
+}
+
+// Tulis seluruh data ke file (buat + tulis + tutup) lewat Io 0.16.
+fn writeFileAll(path: []const u8, data: []const u8) !void {
+    try std.Io.Dir.cwd().writeFile(rt.io, .{ .sub_path = path, .data = data });
+}
+
+// Jalankan proses anak lalu tunggu selesai (process.spawn + wait, Io 0.16).
+fn spawnWait(args: []const []const u8, quiet: bool) !std.process.Child.Term {
+    var child = try std.process.spawn(rt.io, .{
+        .argv = args,
+        .stdout = if (quiet) .ignore else .inherit,
+        .stderr = if (quiet) .ignore else .inherit,
+    });
+    return child.wait(rt.io);
 }
 
 test "driver baca file lalu bebasin" {
+    var threaded = std.Io.Threaded.init(std.testing.allocator, .{});
+    defer threaded.deinit();
+    rt.io = threaded.io();
+
     const tmp = "tenu_driver_test.tenun";
-    {
-        const f = try std.fs.cwd().createFile(tmp, .{});
-        defer f.close();
-        try f.writeAll("biar x = 1;");
-    }
-    defer std.fs.cwd().deleteFile(tmp) catch {};
+    try writeFileAll(tmp, "biar x = 1;");
+    defer std.Io.Dir.cwd().deleteFile(rt.io, tmp) catch {};
 
     const src = try readFile(std.testing.allocator, tmp);
     defer std.testing.allocator.free(src);

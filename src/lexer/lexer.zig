@@ -21,7 +21,7 @@ pub const Lexer = struct {
     }
 
     pub fn tokenize(self: *Lexer, allocator: std.mem.Allocator) ![]Token {
-        var list = std.ArrayList(Token).init(allocator);
+        var list = std.array_list.Managed(Token).init(allocator);
         errdefer list.deinit();
         while (true) {
             const tok = try self.next();

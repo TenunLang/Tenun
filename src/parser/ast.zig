@@ -403,13 +403,13 @@ fn dumpExpr(expr: *Expr, writer: anytype) anyerror!void {
 }
 
 test "dump ekspresi sederhana" {
-    var buf = std.ArrayList(u8).init(std.testing.allocator);
-    defer buf.deinit();
+    var aw = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer aw.deinit();
 
     var two = Expr{ .pos = .{ .line = 1, .column = 1 }, .data = .{ .number = "2" } };
     var three = Expr{ .pos = .{ .line = 1, .column = 5 }, .data = .{ .number = "3" } };
     var bin = Expr{ .pos = .{ .line = 1, .column = 1 }, .data = .{ .binary = .{ .op = .add, .left = &two, .right = &three } } };
 
-    try dumpExpr(&bin, buf.writer());
-    try std.testing.expectEqualStrings("(+ 2 3)", buf.items);
+    try dumpExpr(&bin, &aw.writer);
+    try std.testing.expectEqualStrings("(+ 2 3)", aw.written());
 }

@@ -1,8 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const rt = @import("../rt.zig");
 
 fn envGet(a: std.mem.Allocator, name: []const u8) ![]u8 {
-    return std.process.getEnvVarOwned(a, name) catch return a.dupe(u8, "");
+    return a.dupe(u8, rt.getenv(name) orelse "");
 }
 
 // Info OS berdasarkan kunci. Mengembalikan teks ("" bila tak tersedia).
@@ -14,7 +15,7 @@ pub fn info(a: std.mem.Allocator, kunci: []const u8) ![]u8 {
         return std.fmt.allocPrint(a, "{d}", .{n});
     }
     if (std.mem.eql(u8, kunci, "cwd")) {
-        return std.process.getCwdAlloc(a) catch a.dupe(u8, "");
+        return std.process.currentPathAlloc(rt.io, a) catch a.dupe(u8, "");
     }
     if (std.mem.eql(u8, kunci, "host")) {
         if (builtin.os.tag == .windows) {

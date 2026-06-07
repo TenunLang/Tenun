@@ -19,7 +19,7 @@ pub fn ganti(allocator: std.mem.Allocator, s: []const u8, dari: []const u8, ke: 
 }
 
 pub fn pisah(allocator: std.mem.Allocator, s: []const u8, sep: []const u8) ![][]const u8 {
-    var list = std.ArrayList([]const u8).init(allocator);
+    var list = std.array_list.Managed([]const u8).init(allocator);
     if (sep.len == 0) {
         try list.append(s);
         return list.toOwnedSlice();
@@ -47,7 +47,7 @@ fn hexVal(c: u8) ?u8 {
 }
 
 fn urlDecode(allocator: std.mem.Allocator, s: []const u8) ![]u8 {
-    var buf = std.ArrayList(u8).init(allocator);
+    var buf = std.array_list.Managed(u8).init(allocator);
     var i: usize = 0;
     while (i < s.len) {
         if (s[i] == '%' and i + 2 < s.len) {
