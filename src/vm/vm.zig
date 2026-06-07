@@ -1184,13 +1184,19 @@ const VM = struct {
         return "";
     }
 
-    fn serve(self: *VM, port: u16) !Value {
+    fn serve(self: *VM, port_arg: u16) !Value {
         const tangani_idx = blk: {
             for (self.functions, 0..) |f, i| {
                 if (std.mem.eql(u8, f.name, "tangani")) break :blk i;
             }
             return self.rt("server butuh fungsi 'tangani(metode: teks, jalur: teks, badan: teks): teks'");
         };
+        // Port: env TENUN_PORT bila ada (untuk deploy/reverse-proxy), selain itu argumen.
+        var port: u16 = port_arg;
+        if (std.process.getEnvVarOwned(self.allocator, "TENUN_PORT")) |pv| {
+            defer self.allocator.free(pv);
+            if (std.fmt.parseInt(u16, std.mem.trim(u8, pv, " \t\r\n"), 10)) |p| port = p else |_| {}
+        } else |_| {}
         const addr = std.net.Address.parseIp4("0.0.0.0", port) catch return self.rt("alamat tidak valid");
         var listener = addr.listen(.{ .reuse_address = true }) catch return self.rt("gagal mendengarkan di port");
 
