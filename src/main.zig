@@ -138,7 +138,7 @@ fn printUsage(writer: anytype) !void {
         \\  tenun build <file> --emit-c   simpan juga sumber C perantara
         \\  tenun fmt <file>       rapikan format kode (tulis ke file)
         \\  tenun fmt <file> --stdout   cetak hasil rapi ke layar
-        \\  tenun check [path]     periksa format semua .tenun (default ".", untuk CI)
+        \\  tenun check [path]     jalankan uji unit (berkas *.uji.tenun, default ".")
         \\  tenun repl             mode interaktif (REPL)
         \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
         \\

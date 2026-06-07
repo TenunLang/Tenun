@@ -106,6 +106,10 @@ pub const list = [_]Spec{
     .{ .name = "bulatDari", .params = &.{.desimal}, .ret = .bulat },
     .{ .name = "teksDari", .params = &.{.desimal}, .ret = .teks },
     .{ .name = "bacaGambar", .params = &.{.teks}, .ret = .teks },
+    // Pengujian unit (dipakai berkas *.uji.tenun, dijalankan `tenun check`).
+    .{ .name = "tegas", .params = &.{ .bool, .teks }, .ret = .kosong },
+    .{ .name = "tegasSama", .params = &.{ .teks, .teks, .teks }, .ret = .kosong },
+    .{ .name = "tegasSamaBulat", .params = &.{ .bulat, .bulat, .teks }, .ret = .kosong },
 };
 
 pub const layani_id = 9;

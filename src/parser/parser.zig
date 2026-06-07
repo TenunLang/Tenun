@@ -24,10 +24,20 @@ const Parser = struct {
     cur: usize = 0,
 
     fn declaration(self: *Parser) Error!*ast.Stmt {
+        if (self.check(.kw_impor)) return self.imporStmt();
         if (self.check(.kw_biar)) return self.varDecl(false);
         if (self.check(.kw_tetap)) return self.varDecl(true);
         if (self.check(.kw_fungsi)) return self.fungsiDecl();
         return self.statement();
+    }
+
+    // `impor "spec";` — di-inline tekstual oleh driver sebelum jalan; simpul ini
+    // hanya muncul saat fmt/check mem-parse berkas mentah.
+    fn imporStmt(self: *Parser) Error!*ast.Stmt {
+        const kw = self.advance();
+        const s = try self.expect(.string, "harap nama modul dalam tanda kutip setelah 'impor'");
+        _ = try self.expect(.semicolon, "harap ';' di akhir impor");
+        return self.newStmt(posOf(kw), .{ .impor_stmt = try self.decodeString(s.lexeme) });
     }
 
     fn varDecl(self: *Parser, is_const: bool) Error!*ast.Stmt {

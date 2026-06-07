@@ -157,6 +157,10 @@ pub const Stmt = struct {
         try_stmt: Try,
         match_stmt: Match,
         block: []*Stmt,
+        // `impor "spec";` — diproses tekstual oleh driver (di-inline sebelum
+        // jalan), tapi tetap punya simpul AST agar fmt/check bisa mem-parse
+        // berkas mentah. Tidak pernah sampai ke sema/interp/vm pada alur run.
+        impor_stmt: []const u8,
     };
 
     pub const Try = struct {
@@ -331,6 +335,7 @@ fn dumpStmt(stmt: *Stmt, writer: anytype) anyerror!void {
             try writer.writeByte(')');
         },
         .block => |stmts| try dumpStmts(stmts, writer),
+        .impor_stmt => |spec| try writer.print("(impor \"{s}\")", .{spec}),
     }
 }
 

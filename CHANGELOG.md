@@ -2,6 +2,23 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-07 — Uji unit (`tenun check`) + port ke Zig 0.16
+
+- **`tenun check [path]`** — runner uji unit gaya Jest/Mocha. Menelusuri berkas
+  `*.uji.tenun` secara rekursif (lewati `.git`/`node_modules`/`zig-out`),
+  menjalankan tiap berkas, lalu melaporkan jumlah lulus/gagal. Keluar kode 1
+  bila ada uji gagal atau berkas bergalat — cocok untuk CI tiap modul.
+- Builtin assertion baru: `tegas(kondisi: bool, nama: teks)`,
+  `tegasSama(a: teks, b: teks, nama: teks)`,
+  `tegasSamaBulat(a: bulat, b: bulat, nama: teks)`. Dipakai di berkas uji.
+- `impor "..."` kini **pernyataan formal** dalam grammar (keyword `impor`),
+  bukan sekadar diproses tekstual — supaya `tenun check`/`tenun fmt` bisa
+  mem-parse berkas yang memuat impor. Perilaku run tak berubah (driver tetap
+  meng-inline impor sebelum dijalankan).
+- **Compiler kini dibangun dengan Zig 0.16** (sebelumnya 0.14). Migrasi penuh
+  ke model I/O baru (Io threaded, `std.Io.Dir`/`std.Io.net`, writer ber-buffer,
+  `std.http.Server` reader/writer). CI rilis memakai Zig 0.16.0.
+
 ## 2026-06-07 — WebSocket di port HTTP yang sama (layani)
 
 - `layani` kini deteksi header `Upgrade: websocket` -> handshake (SHA1+base64) lalu serahkan koneksi ke thread pembaca per-koneksi (baca frame + broadcast via registry siar). Web + WebSocket satu proses, satu port. Frontend cukup `ws://host:<port-http>`. Tak perlu `layaniSoket` terpisah untuk chat.

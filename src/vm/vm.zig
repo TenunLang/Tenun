@@ -18,6 +18,7 @@ const waktu = @import("../builtins/waktu.zig");
 const os = @import("../builtins/os.zig");
 const proses = @import("../builtins/proses.zig");
 const gambar = @import("../builtins/gambar.zig");
+const uji = @import("../builtins/uji.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -251,6 +252,7 @@ const Compiler = struct {
                 try c.emitOp(.pop);
             },
             .block => |stmts| try self.block(stmts),
+            .impor_stmt => {}, // di-inline oleh driver sebelum dikompilasi
             .if_stmt => |d| {
                 try self.expr(d.cond);
                 const then_jump = try self.emitJump(.jump_if_false);
@@ -1169,6 +1171,18 @@ const VM = struct {
             59 => .{ .teks = tls.recv(a, args[0].bulat, @intCast(args[1].bulat)) catch return self.rt("gagal terima TLS") },
             60 => blk: {
                 tls.close(args[0].bulat);
+                break :blk Value.kosong;
+            },
+            95 => blk: {
+                uji.tegas(args[0].bool, args[1].teks);
+                break :blk Value.kosong;
+            },
+            96 => blk: {
+                uji.tegasSama(args[0].teks, args[1].teks, args[2].teks);
+                break :blk Value.kosong;
+            },
+            97 => blk: {
+                uji.tegasSamaBulat(args[0].bulat, args[1].bulat, args[2].teks);
                 break :blk Value.kosong;
             },
             else => unreachable,

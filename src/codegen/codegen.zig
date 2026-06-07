@@ -168,6 +168,7 @@ const Codegen = struct {
                 }
             },
             .block => |stmts| try self.block(stmts),
+            .impor_stmt => {}, // di-inline oleh driver sebelum codegen
             .if_stmt => |d| {
                 try self.w("if (");
                 try self.expr(d.cond);

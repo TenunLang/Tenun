@@ -18,6 +18,7 @@ const waktu = @import("../builtins/waktu.zig");
 const os = @import("../builtins/os.zig");
 const proses = @import("../builtins/proses.zig");
 const gambar = @import("../builtins/gambar.zig");
+const uji = @import("../builtins/uji.zig");
 
 pub const Value = union(enum) {
     bulat: i64,
@@ -193,6 +194,7 @@ pub const Interpreter = struct {
                 };
             },
             .block => |stmts| try self.execBlock(stmts),
+            .impor_stmt => {}, // di-inline oleh driver sebelum dieksekusi
         }
     }
 
@@ -705,6 +707,18 @@ pub const Interpreter = struct {
             59 => .{ .teks = tls.recv(a, args[0].bulat, @intCast(args[1].bulat)) catch return self.runtimeError(pos, "gagal terima TLS") },
             60 => blk: {
                 tls.close(args[0].bulat);
+                break :blk .kosong;
+            },
+            95 => blk: {
+                uji.tegas(args[0].bool, args[1].teks);
+                break :blk .kosong;
+            },
+            96 => blk: {
+                uji.tegasSama(args[0].teks, args[1].teks, args[2].teks);
+                break :blk .kosong;
+            },
+            97 => blk: {
+                uji.tegasSamaBulat(args[0].bulat, args[1].bulat, args[2].teks);
                 break :blk .kosong;
             },
             else => unreachable,

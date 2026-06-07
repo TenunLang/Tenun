@@ -7,8 +7,9 @@ Notasi: EBNF. `*` = nol atau lebih, `?` = opsional, `|` = alternatif, `( )` = gr
 ```ebnf
 program     = deklarasi* EOF ;
 
-deklarasi   = varDecl | fungsiDecl | statement ;
+deklarasi   = imporStmt | varDecl | fungsiDecl | statement ;
 
+imporStmt   = "impor" STRING ";" ;
 varDecl     = ("biar" | "tetap") IDENT (":" tipe)? "=" ekspresi ";" ;
 fungsiDecl  = "fungsi" IDENT "(" params? ")" ":" tipe blok ;
 params      = param ("," param)* ;

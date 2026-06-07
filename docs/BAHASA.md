@@ -544,3 +544,39 @@ $ ./examples/faktorial.exe
 ```
 
 Perbandingan kecepatan (loop 50 juta, ReleaseFast): native ~0.01s, VM ~1.1s, interpreter ~2.7s.
+
+## Uji unit (`tenun check`)
+
+Tenun punya runner uji unit bawaan gaya Jest/Mocha. Tulis berkas berakhiran
+`.uji.tenun` (lazimnya di folder `uji/`), impor kode yang diuji, lalu nyatakan
+ekspektasi dengan builtin assertion:
+
+- `tegas(kondisi: bool, nama: teks)` — lulus bila `kondisi` benar.
+- `tegasSama(a: teks, b: teks, nama: teks)` — lulus bila dua teks sama.
+- `tegasSamaBulat(a: bulat, b: bulat, nama: teks)` — lulus bila dua bulat sama.
+
+Contoh `uji/json.uji.tenun`:
+
+```
+impor "../src/json.tenun";
+
+biar j: teks = json_objek(["nama"], ["Budi"]);
+tegasSama(json_ambil(j, "nama"), "Budi", "ambil field nama");
+tegas(panjangTeks(j) > 0, "objek tak kosong");
+```
+
+Jalankan semua uji:
+
+```
+$ tenun check
+uji/json.uji.tenun
+  LULUS ambil field nama
+  LULUS objek tak kosong
+
+[tenun check] 2 lulus, 0 gagal (1 berkas uji)
+```
+
+`tenun check [path]` menelusuri `path` (default direktori saat ini) secara
+rekursif, menjalankan tiap berkas `*.uji.tenun`, dan keluar dengan kode 1 bila
+ada uji yang gagal atau berkas yang bergalat — sehingga bisa dipakai langsung
+sebagai langkah CI tiap modul.

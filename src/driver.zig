@@ -8,6 +8,7 @@ const Interpreter = @import("interp/interp.zig").Interpreter;
 const vm = @import("vm/vm.zig");
 const codegen = @import("codegen/codegen.zig");
 const fmt = @import("fmt/fmt.zig");
+const uji = @import("builtins/uji.zig");
 const argv = @import("builtins/argv.zig");
 const builtin = @import("builtin");
 
@@ -254,109 +255,120 @@ pub fn fmtFile(allocator: std.mem.Allocator, path: []const u8, write: bool) !voi
     }
 }
 
-// Periksa format seluruh berkas .tenun di bawah `root` (rekursif). Tidak menulis
-// apa pun — hanya melaporkan berkas yang belum rapi atau bergalat sintaks.
-// Mengembalikan jumlah berkas bermasalah (0 = lulus). Dipakai di CI: `tenun check`.
+// Jalankan seluruh uji unit (berkas `*.uji.tenun`) di bawah `root` (rekursif).
+// Gaya Jest/Mocha: tiap berkas dijalankan, builtin tegas*() mencatat lulus/gagal.
+// Mengembalikan jumlah uji gagal + berkas bergalat (0 = semua lulus). CI: `tenun check`.
 pub fn check(allocator: std.mem.Allocator, root: []const u8) !usize {
     const stdout = rt.out();
     const stderr = rt.err();
     defer stdout.flush() catch {};
     defer stderr.flush() catch {};
 
-    var bad: usize = 0;
-    var total: usize = 0;
-    checkPath(allocator, root, stdout, &bad, &total) catch |err| {
-        try stderr.print("error: gagal memeriksa '{s}': {s}\n", .{ root, @errorName(err) });
+    var files = std.array_list.Managed([]const u8).init(allocator);
+    defer {
+        for (files.items) |f| allocator.free(f);
+        files.deinit();
+    }
+    cariUji(allocator, root, &files) catch |err| {
+        try stderr.print("error: gagal menelusuri '{s}': {s}\n", .{ root, @errorName(err) });
         return 1;
     };
 
-    if (bad == 0) {
-        try stdout.print("[tenun check] {d} berkas .tenun sudah rapi\n", .{total});
-    } else {
-        try stdout.print("[tenun check] {d}/{d} berkas perlu diformat — jalankan: tenun fmt <berkas>\n", .{ bad, total });
+    if (files.items.len == 0) {
+        try stdout.print("[tenun check] tidak ada berkas uji (*.uji.tenun) di '{s}'\n", .{root});
+        return 0;
     }
-    return bad;
+
+    var total_lulus: usize = 0;
+    var total_gagal: usize = 0;
+    for (files.items) |f| {
+        try stdout.print("\n{s}\n", .{f});
+        stdout.flush() catch {};
+        uji.reset();
+        const ok = jalankanUji(allocator, f);
+        total_lulus += uji.lulus();
+        total_gagal += uji.gagal();
+        if (!ok) {
+            total_gagal += 1;
+            try stdout.print("  GAGAL berkas tak bisa dijalankan\n", .{});
+        }
+    }
+
+    try stdout.print("\n[tenun check] {d} lulus, {d} gagal ({d} berkas uji)\n", .{ total_lulus, total_gagal, files.items.len });
+    return total_gagal;
 }
 
-fn checkPath(allocator: std.mem.Allocator, path: []const u8, stdout: *std.Io.Writer, bad: *usize, total: *usize) !void {
-    // Berkas tunggal .tenun.
-    if (std.mem.endsWith(u8, path, ".tenun")) {
-        try checkFile(allocator, path, stdout, bad, total);
+// Telusuri direktori, kumpulkan berkas berakhiran `.uji.tenun`.
+fn cariUji(allocator: std.mem.Allocator, path: []const u8, out: *std.array_list.Managed([]const u8)) !void {
+    if (std.mem.endsWith(u8, path, ".uji.tenun")) {
+        try out.append(try allocator.dupe(u8, path));
         return;
     }
-    // Selain itu perlakukan sebagai direktori; bila bukan direktori, coba sebagai berkas.
-    var dir = std.Io.Dir.cwd().openDir(rt.io, path, .{ .iterate = true }) catch {
-        try checkFile(allocator, path, stdout, bad, total);
-        return;
-    };
+    var dir = std.Io.Dir.cwd().openDir(rt.io, path, .{ .iterate = true }) catch return;
     defer dir.close(rt.io);
 
     var it = dir.iterate();
     while (try it.next(rt.io)) |entry| {
         if (lewatiNama(entry.name)) continue;
         const child = try std.fs.path.join(allocator, &.{ path, entry.name });
-        defer allocator.free(child);
         switch (entry.kind) {
-            .directory => try checkPath(allocator, child, stdout, bad, total),
-            .file => if (std.mem.endsWith(u8, entry.name, ".tenun"))
-                try checkFile(allocator, child, stdout, bad, total),
-            else => {},
+            .directory => {
+                defer allocator.free(child);
+                try cariUji(allocator, child, out);
+            },
+            .file => if (std.mem.endsWith(u8, entry.name, ".uji.tenun")) {
+                try out.append(child);
+            } else allocator.free(child),
+            else => allocator.free(child),
         }
     }
 }
 
 // Direktori yang dilewati saat menelusuri (dependensi & artefak build).
 fn lewatiNama(name: []const u8) bool {
-    const skip = [_][]const u8{ ".git", "tenun_modul", "node_modules", "zig-out", ".zig-cache" };
+    const skip = [_][]const u8{ ".git", "node_modules", "zig-out", ".zig-cache" };
     for (skip) |s| if (std.mem.eql(u8, name, s)) return true;
     return false;
 }
 
-fn checkFile(allocator: std.mem.Allocator, path: []const u8, stdout: *std.Io.Writer, bad: *usize, total: *usize) !void {
-    total.* += 1;
-    const source = readFile(allocator, path) catch {
-        bad.* += 1;
-        try stdout.print("  galat baca: {s}\n", .{path});
-        return;
-    };
+// Jalankan satu berkas uji lewat VM (impor di-inline). Kembalikan false bila
+// gagal lex/parse/sema atau galat runtime.
+fn jalankanUji(allocator: std.mem.Allocator, path: []const u8) bool {
+    const stderr = rt.err();
+    const stdout = rt.out();
+
+    const source = loadProgram(allocator, path) catch return false;
     defer allocator.free(source);
 
     var diags = Diagnostics.init(allocator);
     defer diags.deinit();
 
     var lexer = Lexer.init(source, &diags);
-    const tokens = lexer.tokenize(allocator) catch {
-        bad.* += 1;
-        try stdout.print("  galat sintaks: {s}\n", .{path});
-        return;
-    };
+    const tokens = lexer.tokenize(allocator) catch return false;
     defer allocator.free(tokens);
     if (diags.hasErrors()) {
-        bad.* += 1;
-        try stdout.print("  galat sintaks: {s}\n", .{path});
-        return;
+        diags.print(stderr) catch {};
+        return false;
     }
 
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const program = parser.parse(arena.allocator(), tokens, &diags) catch {
-        bad.* += 1;
-        try stdout.print("  galat sintaks: {s}\n", .{path});
-        return;
+        diags.print(stderr) catch {};
+        return false;
     };
 
-    var aw = std.Io.Writer.Allocating.init(allocator);
-    defer aw.deinit();
-    fmt.format(program, &aw.writer) catch {
-        bad.* += 1;
-        try stdout.print("  galat format: {s}\n", .{path});
-        return;
-    };
-
-    if (!std.mem.eql(u8, aw.written(), source)) {
-        bad.* += 1;
-        try stdout.print("  perlu format: {s}\n", .{path});
+    sema.check(allocator, program, &diags) catch {};
+    if (diags.hasErrors()) {
+        diags.print(stderr) catch {};
+        return false;
     }
+
+    vm.run(allocator, program, &diags, stdout) catch {
+        diags.print(stderr) catch {};
+        return false;
+    };
+    return true;
 }
 
 // REPL: baca baris, jalankan via interpreter, simpan deklarasi antar baris.

@@ -141,6 +141,7 @@ fn stmt(s: *ast.Stmt, writer: anytype, level: usize) anyerror!void {
             try writer.writeByte('}');
         },
         .block => |stmts| try block(stmts, writer, level),
+        .impor_stmt => |spec| try writer.print("impor \"{s}\";", .{spec}),
     }
 }
 

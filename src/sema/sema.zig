@@ -202,6 +202,7 @@ const Sema = struct {
                 }
             },
             .block => |stmts| try self.checkBlock(stmts, ret),
+            .impor_stmt => {}, // di-inline oleh driver sebelum sampai ke sema
         }
     }
 
