@@ -487,6 +487,49 @@ pub fn add(allocator: std.mem.Allocator, arg: []const u8) anyerror!void {
     try stdout.print("[tenun] modul '{s}' terpasang di {s} — pakai dengan: impor \"{s}\";\n", .{ name, dest, name });
 }
 
+// `tenun install` — pasang semua dependensi proyek dari "butuh" di tenun.json
+// (mirip `npm install`). Tiap modul ditarik via add() yang rekursif ke deps-nya.
+pub fn install(allocator: std.mem.Allocator) !void {
+    const stdout = rt.out();
+    const stderr = rt.err();
+    defer stdout.flush() catch {};
+    defer stderr.flush() catch {};
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const data = readFile(a, "tenun.json") catch {
+        try stderr.print("error: tenun.json tidak ditemukan di direktori ini\n", .{});
+        return;
+    };
+    const root = std.json.parseFromSliceLeaky(std.json.Value, a, data, .{}) catch {
+        try stderr.print("error: tenun.json tidak valid\n", .{});
+        return;
+    };
+    const butuh = if (root == .object) root.object.get("butuh") else null;
+    if (butuh == null or butuh.? != .object or butuh.?.object.count() == 0) {
+        try stdout.print("[tenun] tidak ada dependensi di \"butuh\" — tidak ada yang dipasang\n", .{});
+        return;
+    }
+
+    var n: usize = 0;
+    var it = butuh.?.object.iterator();
+    while (it.next()) |entry| {
+        const dep = entry.key_ptr.*;
+        const destdep = try std.fmt.allocPrint(a, "tenun_modul/{s}", .{dep});
+        if (std.Io.Dir.cwd().access(rt.io, destdep, .{})) {
+            try stdout.print("[tenun] '{s}' sudah terpasang — lewati\n", .{dep});
+            continue;
+        } else |_| {}
+        const dep_owned = try allocator.dupe(u8, dep);
+        defer allocator.free(dep_owned);
+        add(allocator, dep_owned) catch {};
+        n += 1;
+    }
+    try stdout.print("[tenun] selesai — {d} modul diproses\n", .{n});
+}
+
 // Pasang dependensi modul (bidang "butuh" di tenun.json modul) secara rekursif.
 fn pasangDependensi(allocator: std.mem.Allocator, name: []const u8) anyerror!void {
     var arena = std.heap.ArenaAllocator.init(allocator);

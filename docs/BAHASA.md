@@ -101,9 +101,36 @@ Impor bersifat **rekursif** (berkas yang diimpor boleh mengimpor lagi) dan aman 
 }
 ```
 
+Pasang **semua** dependensi proyek sekaligus (mirip `npm install`) dengan:
+
+```
+tenun install            # baca "butuh" di tenun.json, pasang semua (rekursif)
+```
+
+`tenun install` melewati modul yang sudah ada di `tenun_modul/` dan menarik dependensi transitif tiap modul. Cocok untuk deploy: cukup `tenun install` lalu jalankan.
+
 Setiap modul adalah repo sendiri: `TenunLang/modul-<nama>`, berisi `<nama>.tenun` (sumber) dan `tenun.json` (manifest: nama, versi, deskripsi, lisensi, berkas, kataKunci, butuh).
 
 Catatan: saat ini `impor` menggabungkan fungsi modul ke ruang nama global (panggil langsung namanya). Bentuk bernamespace `tetap m = modul("mysql")` lalu `m.sambung(...)` direncanakan (perlu fungsi sebagai nilai / akses anggota).
+
+## Berkas .env [JALAN]
+
+Bila ada berkas `.env` di direktori kerja, runtime memuatnya otomatis saat start. Isinya dibaca lewat builtin `lingkungan("NAMA")`.
+
+```
+# .env — KEY=VALUE per baris
+PGHOST=127.0.0.1
+PGPORT=5432
+export REDIS_HOST=127.0.0.1     # prefix "export" boleh
+GREETING="halo dunia"           # kutip " atau ' opsional
+# baris diawali # diabaikan
+```
+
+```tenun
+biar host: teks = lingkungan("PGHOST");   // "127.0.0.1"
+```
+
+Aturan: baris kosong & komentar (`#`) dilewati, prefix `export ` didukung, kutip ganda/tunggal di sekeliling nilai dilepas. **Env proses asli menang** atas nilai `.env` (mis. `PGHOST=... tenun` atau env systemd menimpa `.env`) — jadi `.env` aman sebagai default lokal sementara produksi memakai env nyata. Jangan commit `.env`; sediakan `.env.example`.
 
 ## Larik (array) [JALAN]
 

@@ -10,6 +10,9 @@ pub fn main(init: std.process.Init) !void {
     rt.env_map = init.environ_map;
     const allocator = std.heap.c_allocator;
 
+    // Muat .env (bila ada) ke overlay env sebelum apa pun jalan.
+    rt.loadDotenv(allocator);
+
     const arena = init.arena.allocator();
     const raw = try init.minimal.args.toSlice(arena);
 
@@ -45,6 +48,8 @@ fn dispatch(allocator: std.mem.Allocator, args: []const []const u8) anyerror!voi
         } else {
             try driver.add(allocator, args[1]);
         }
+    } else if (std.mem.eql(u8, cmd, "install") or std.mem.eql(u8, cmd, "pasang")) {
+        try driver.install(allocator);
     } else if (std.mem.eql(u8, cmd, "run")) {
         var path: ?[]const u8 = null;
         var use_vm = true;
@@ -140,9 +145,11 @@ fn printUsage(writer: anytype) !void {
         \\  tenun fmt <file> --stdout   cetak hasil rapi ke layar
         \\  tenun check [path]     jalankan uji unit (berkas *.uji.tenun, default ".")
         \\  tenun repl             mode interaktif (REPL)
-        \\  tenun add <modul>      pasang modul dari GitHub (TenunLang/modul-<modul>)
+        \\  tenun add <modul>      pasang satu modul dari GitHub (TenunLang/modul-<modul>)
+        \\  tenun install          pasang semua dependensi dari "butuh" di tenun.json
         \\
         \\Dalam kode, pakai modul dengan: impor "<modul>";
+        \\Variabel dari berkas .env otomatis terbaca lewat builtin lingkungan("NAMA").
         \\
     , .{version});
 }

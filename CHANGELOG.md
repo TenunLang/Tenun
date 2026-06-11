@@ -2,6 +2,19 @@
 
 Catatan semua perubahan penting + keputusan desain. Format: terbaru di atas.
 
+## 2026-06-08 — `tenun install` + auto-load `.env`
+
+- **`tenun install`** (alias `tenun pasang`) — pasang semua dependensi proyek
+  dari bidang `"butuh"` di `tenun.json` sekaligus (mirip `npm install`). Tiap
+  modul ditarik via mekanisme `add` yang rekursif ke dependensinya; modul yang
+  sudah ada di `tenun_modul/` dilewati. `tenun add <modul>` tetap untuk satu modul.
+- **Auto-load `.env`** — bila ada berkas `.env` di direktori kerja, runtime
+  memuatnya saat start dan nilainya terbaca lewat `lingkungan("NAMA")`. Format
+  `KEY=VALUE` per baris: lewati baris kosong & komentar `#`, dukung prefix
+  `export `, lepas kutip `"`/`'`. **Env proses asli menang** atas `.env`.
+- `tenun-server new` kini memakai `tenun install` (bukan `tenun add jala`) agar
+  semua dependensi app terpasang saat deploy.
+
 ## 2026-06-07 — Uji unit (`tenun check`) + port ke Zig 0.16
 
 - **`tenun check [path]`** — runner uji unit gaya Jest/Mocha. Menelusuri berkas
